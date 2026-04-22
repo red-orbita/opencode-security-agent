@@ -21,6 +21,43 @@ const TIMEOUT_MS = 5000
 const BLOCK_REASON_PATTERN =
   /\[CRITICAL\]|\[HIGH\]|\[MEDIUM\]|\[LOW\]|blocked|Security Agent|prompt injection/i
 
+/**
+ * Self-protection: patterns that match allowlist and security config files.
+ * These files must NEVER be writable by the agent — only by a human
+ * editing them directly outside of OpenCode.
+ */
+const SELF_PROTECTED_PATTERNS = [
+  /sentinel-allowlist\.json/i,
+  /\.security\/.*\.json$/i,
+  /mcp-sentinel-threats\.json/i,
+  /iocs\.json$/i,
+]
+
+/**
+ * Tools that can write files — we inspect their args for self-protection.
+ */
+const WRITE_TOOLS = new Set(["write", "edit", "bash"])
+
+function isSelfProtectedPath(args: Record<string, any>): string | null {
+  // Check filePath (write/edit tools) and command (bash)
+  const paths = [
+    args.filePath,
+    args.newFilePath,
+    args.content,
+    args.command,
+  ].filter(Boolean)
+
+  for (const val of paths) {
+    if (typeof val !== "string") continue
+    for (const pattern of SELF_PROTECTED_PATTERNS) {
+      if (pattern.test(val)) {
+        return val
+      }
+    }
+  }
+  return null
+}
+
 export const SecurityAgentPlugin: Plugin = async ({
   project,
   client,
@@ -36,6 +73,18 @@ export const SecurityAgentPlugin: Plugin = async ({
     "tool.execute.before": async (input, output) => {
       const startTime = performance.now()
       try {
+        // --- SELF-PROTECTION: block writes to allowlist/security files ---
+        if (WRITE_TOOLS.has(input.tool)) {
+          const protectedMatch = isSelfProtectedPath(output.args)
+          if (protectedMatch) {
+            throw new Error(
+              `OpenCode Security Agent blocked a ${input.tool} call.\n` +
+              `Reason: [CRITICAL] self-protection: writing to security configuration files ` +
+              `is not allowed from within the agent. Edit this file manually outside OpenCode.\n` +
+              `Matched: ${protectedMatch}`
+            )
+          }
+        }
         // Verify the hook script exists before spawning
         if (!existsSync(hookScript)) {
           await client.app.log({

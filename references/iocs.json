@@ -10,31 +10,51 @@
       "~/.ssh/id_rsa",
       "~/.ssh/id_ed25519",
       "~/.ssh/config",
+      "~/.ssh/authorized_keys",
+      "~/.ssh/known_hosts",
+      "~/.aws/",
       "~/.aws/credentials",
       "~/.aws/config",
       "~/.gnupg/",
       "~/.config/gh/hosts.yml",
       "~/.config/opencode/",
       "~/.config/claude/",
+      "~/.config/gcloud/",
+      "~/.azure/",
       "~/.netrc",
       "~/.pgpass",
       "~/.docker/config.json",
       "~/.kube/config",
+      "~/.kube/",
       "~/.npmrc",
+      "~/.pypirc",
+      "~/.git-credentials",
+      "~/.gitconfig",
       "~/.bash_history",
       "~/.zsh_history",
       "~/.mysql_history",
       "~/.psql_history",
+      "~/.node_repl_history",
+      "~/.python_history",
+      "~/.lesshst",
+      "~/.wget-hsts",
       "/etc/shadow",
       "/etc/passwd",
-      "/etc/sudoers"
+      "/etc/sudoers",
+      "/etc/master.passwd"
     ],
     "regex_patterns": [
       "\\.env(\\.|$)",
       "(?i)credentials?\\.json",
       "(?i)secrets?\\.(json|ya?ml|env)",
       "(?i)api[_-]?keys?\\.(json|txt|env)",
-      "(?i)private[_-]?key"
+      "(?i)private[_-]?key",
+      "(?i)service[_-]?account.*\\.json",
+      "(?i)token\\.(json|txt|yaml)",
+      "(?i)\\.pem$",
+      "(?i)\\.p12$",
+      "(?i)\\.pfx$",
+      "(?i)\\.key$"
     ]
   },
 
@@ -97,7 +117,11 @@
       "(?i)webhook\\.site",
       "(?i)requestbin",
       "(?i)ngrok\\.(io|app)",
-      "(?i)serveo\\.net"
+      "(?i)serveo\\.net",
+      "https?://\\[[:0-9a-fA-F]+\\]",
+      "(?i)localhost\\.run",
+      "(?i)loca\\.lt",
+      "(?i)burpcollaborator\\.net"
     ]
   },
 
@@ -121,7 +145,41 @@
       "(?i):\\(\\)\\s*\\{.*\\|.*\\}",
       "(?i)python\\s+-m\\s+http\\.server",
       "(?i)scp\\s+.*@",
-      "(?i)rsync\\s+.*@"
+      "(?i)rsync\\s+.*@",
+
+      "(?i)nslookup\\s+.*\\$\\(",
+      "(?i)dig\\s+.*\\$\\(",
+      "(?i)host\\s+.*\\$\\(",
+      "(?i)ping\\s+.*\\$\\(",
+      "(?i)nslookup\\s+`",
+      "(?i)dig\\s+`",
+      "(?i)ping\\s+`",
+
+      "(?i)python3?\\s+-c\\s+.*\\b(socket|subprocess|os\\.system|os\\.popen|commands|pty\\.spawn|exec|eval)\\b",
+      "(?i)ruby\\s+-e\\s+.*\\b(system|exec|spawn|IO\\.popen|open\\s*\\(\\s*['\"]\\|)\\b",
+      "(?i)perl\\s+-e\\s+.*\\b(system|exec|open\\s*\\(.*\\|)\\b",
+      "(?i)awk\\s+.*\\bsystem\\s*\\(",
+      "(?i)node\\s+-e\\s+.*\\b(child_process|exec|spawn|execSync)\\b",
+      "(?i)php\\s+-r\\s+.*\\b(system|exec|shell_exec|passthru|popen|proc_open)\\b",
+      "(?i)lua\\s+-e\\s+.*\\bos\\.execute\\b",
+
+      "(?i)(^|;|\\||&&)\\s*env\\s*(\\||$|\\s+\\|)",
+      "(?i)(^|;|\\||&&)\\s*printenv\\b",
+      "(?i)\\benv\\s*\\|\\s*grep",
+      "(?i)\\bprintenv\\s*\\|",
+      "(?i)\\bset\\s*\\|\\s*grep\\s+.*(key|secret|token|password|cred)",
+      "(?i)\\bhistory\\s*\\|\\s*grep\\s+.*(password|key|secret|token|cred)",
+      "(?i)\\bhistory\\b.*>",
+
+      "(?i)\\bls\\s+~/\\.\\*/",
+      "(?i)\\bls\\s+-[a-zA-Z]*l[a-zA-Z]*\\s+~/\\.\\*",
+      "(?i)\\bfind\\s+~/?\\.\\S*\\s+.*-exec",
+      "(?i)\\bfind\\s+~\\s+.*-name\\s+['\"]?\\.",
+
+      "(?i)\\bnc\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
+      "(?i)\\bncat\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
+      "(?i)\\bsocat\\b.*TCP:\\d+\\.\\d+",
+      "(?i)\\btelnet\\s+\\d+\\.\\d+\\.\\d+\\.\\d+"
     ]
   },
 

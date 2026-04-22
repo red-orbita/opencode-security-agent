@@ -138,6 +138,119 @@ def is_allowlisted_domain(url_or_domain, allowlist_domains):
     return any(d.lower() in url_lc for d in allowlist_domains)
 
 
+def _generate_typosquat_variants(domain):
+    """Generate common typosquatting variants for a domain.
+
+    Covers: character substitution (homoglyphs), character deletion,
+    character transposition, hyphen insertion/removal, and TLD swaps.
+    Returns a set of variant strings (lowercase, without TLD for prefix matching).
+    """
+    name, _, tld = domain.rpartition(".")
+    if not name:
+        return set()
+
+    variants = set()
+
+    # Homoglyph substitutions (common confusables)
+    homoglyphs = {
+        "a": ["4", "@"],
+        "b": ["d", "6"],
+        "c": ["k"],
+        "d": ["b"],
+        "e": ["3"],
+        "g": ["q", "9"],
+        "i": ["1", "l", "!"],
+        "l": ["1", "i", "|"],
+        "o": ["0"],
+        "s": ["5", "$"],
+        "t": ["7"],
+        "u": ["v"],
+        "v": ["u"],
+        "z": ["2"],
+    }
+    for i, ch in enumerate(name):
+        for replacement in homoglyphs.get(ch, []):
+            variant = name[:i] + replacement + name[i + 1:]
+            variants.add(variant)
+
+    # Single character deletion
+    for i in range(len(name)):
+        variant = name[:i] + name[i + 1:]
+        if len(variant) > 1:
+            variants.add(variant)
+
+    # Adjacent character transposition
+    for i in range(len(name) - 1):
+        variant = name[:i] + name[i + 1] + name[i] + name[i + 2:]
+        variants.add(variant)
+
+    # Hyphen insertion between every pair of characters
+    for i in range(1, len(name)):
+        variant = name[:i] + "-" + name[i:]
+        variants.add(variant)
+
+    # Hyphen removal (if present)
+    if "-" in name:
+        variants.add(name.replace("-", ""))
+
+    # Common TLD swaps
+    alt_tlds = ["com", "net", "org", "io", "co", "club", "xyz", "info", "biz", "app"]
+    for alt in alt_tlds:
+        if alt != tld:
+            variants.add(f"{name}.{alt}")
+
+    # Add original name for prefix matching (name + any TLD)
+    return variants
+
+
+def check_typosquatting(text, known_malicious_domains):
+    """Check if text contains a typosquatting variant of a known malicious domain.
+
+    Returns (reason, severity) or (None, None).
+    Only matches variants that appear in URL-like context (preceded by ://, @, or
+    followed by a dot+TLD pattern) to avoid false positives on common substrings.
+    """
+    text_lc = text.lower()
+    for entry in known_malicious_domains:
+        domain = entry.get("domain", "")
+        if not domain:
+            continue
+        variants = _generate_typosquat_variants(domain)
+        for variant in variants:
+            # Skip if variant is the exact domain (already caught by exact match)
+            if variant == domain:
+                continue
+            # Skip very short variants (< 4 chars) — too many false positives
+            if len(variant) < 4:
+                continue
+            if variant not in text_lc:
+                continue
+            # Require URL-like context: variant must appear after ://, after @,
+            # or be followed by . + TLD-like suffix, or be a full domain with TLD
+            # This prevents matching "evi" inside "previous"
+            if "." in variant:
+                # Full domain variant (e.g., "giftshop.net") — match as-is
+                return (
+                    f"possible typosquatting of known-malicious domain '{domain}': "
+                    f"found '{variant}' in text",
+                    "high",
+                )
+            # Variant without TLD — must appear in URL context
+            url_context_patterns = [
+                rf"://[^/\s]*{re.escape(variant)}",  # after ://
+                rf"@{re.escape(variant)}",  # after @
+                rf"{re.escape(variant)}\.[a-z]{{2,10}}",  # followed by .tld
+            ]
+            for pat in url_context_patterns:
+                if re.search(pat, text_lc):
+                    return (
+                        f"possible typosquatting of known-malicious domain '{domain}': "
+                        f"found '{variant}' in URL context",
+                        "high",
+                    )
+    return (None, None)
+
+
 def check_sensitive_paths(tool_input, iocs, allowlist):
     """Return (hit_pattern, severity) or (None, None)."""
     patterns = iocs.get("sensitive_paths", {}).get("patterns", [])
@@ -197,6 +310,11 @@ def check_suspicious_network(tool_input, iocs, allowlist):
         for entry in known_malicious:
             if entry.get("domain", "").lower() in text.lower():
                 return (f"known-malicious domain: {entry['domain']} ({entry.get('incident', 'confirmed incident')})", "critical")
+
+        # Typosquatting detection -- high severity
+        typo_reason, typo_severity = check_typosquatting(text, known_malicious)
+        if typo_severity:
+            return (typo_reason, typo_severity)
 
         # Allowlisted? Skip remaining checks.
         if is_allowlisted_domain(text, allowed_domains):
