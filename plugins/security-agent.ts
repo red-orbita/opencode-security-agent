@@ -38,23 +38,40 @@ const SELF_PROTECTED_PATTERNS = [
  */
 const WRITE_TOOLS = new Set(["write", "edit", "bash"])
 
-function isSelfProtectedPath(args: Record<string, any>): string | null {
-  // Check filePath (write/edit tools) and command (bash)
-  const paths = [
-    args.filePath,
-    args.newFilePath,
-    args.content,
-    args.command,
-  ].filter(Boolean)
-
-  for (const val of paths) {
-    if (typeof val !== "string") continue
-    for (const pattern of SELF_PROTECTED_PATTERNS) {
-      if (pattern.test(val)) {
-        return val
+function isSelfProtectedPath(tool: string, args: Record<string, any>): string | null {
+  // For write/edit tools, only check the target file path (not content)
+  if (tool === "write" || tool === "edit") {
+    const targets = [args.filePath, args.newFilePath].filter(Boolean)
+    for (const val of targets) {
+      if (typeof val !== "string") continue
+      for (const pattern of SELF_PROTECTED_PATTERNS) {
+        if (pattern.test(val)) return val
       }
     }
+    return null
   }
+
+  // For bash, only block commands that clearly write to protected files
+  if (tool === "bash") {
+    const cmd = args.command || ""
+    if (typeof cmd !== "string") return null
+    const writePatterns = [
+      />\s*\S*sentinel-allowlist/i,
+      /tee\s+\S*sentinel-allowlist/i,
+      /cp\s+.*sentinel-allowlist/i,
+      /mv\s+.*sentinel-allowlist/i,
+      /rm\s+.*sentinel-allowlist/i,
+      />\s*\S*iocs\.json/i,
+      /tee\s+\S*iocs\.json/i,
+      /rm\s+.*iocs\.json/i,
+      />\s*\S*mcp-sentinel-threats/i,
+      /rm\s+.*mcp-sentinel-threats/i,
+    ]
+    for (const wp of writePatterns) {
+      if (wp.test(cmd)) return cmd
+    }
+  }
+
   return null
 }
 
@@ -75,7 +92,7 @@ export const SecurityAgentPlugin: Plugin = async ({
       try {
         // --- SELF-PROTECTION: block writes to allowlist/security files ---
         if (WRITE_TOOLS.has(input.tool)) {
-          const protectedMatch = isSelfProtectedPath(output.args)
+          const protectedMatch = isSelfProtectedPath(input.tool, output.args)
           if (protectedMatch) {
             throw new Error(
               `OpenCode Security Agent blocked a ${input.tool} call.\n` +

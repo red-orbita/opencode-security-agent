@@ -554,6 +554,14 @@ def decide(payload):
             "A human must edit this file manually outside of OpenCode."
         )
 
+    # If the target file is explicitly allowlisted, skip all content checks.
+    # This lets users allowlist files whose content contains security patterns
+    # (e.g. scripts that reference .env, documentation that mentions malicious domains).
+    allowed_paths = allowlist.get("paths", []) + iocs.get("allowlist", {}).get("paths", [])
+    target_file = tool_input.get("filePath", "") or tool_input.get("newFilePath", "")
+    if target_file and any(is_allowlisted_path(target_file, [p]) for p in allowed_paths):
+        return "allow", None
+
     # All checks: ("3arg", fn) takes (tool_input, iocs, allowlist),
     #             ("2arg", fn) takes (tool_input, iocs)
     checks = [
