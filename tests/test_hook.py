@@ -414,6 +414,56 @@ def main():
         "allow",
     ))
 
+    # ---- SELF-PROTECTION: allowlist/security config files ----------------
+
+    results.append(expect(
+        "Self-protection: write tool to sentinel-allowlist.json",
+        {"tool_name": "write", "tool_input": {"filePath": ".security/sentinel-allowlist.json", "content": "{}"}},
+        "deny",
+        expected_substr="self-protection",
+    ))
+
+    results.append(expect(
+        "Self-protection: edit tool to sentinel-allowlist.json",
+        {"tool_name": "edit", "tool_input": {"filePath": "/home/user/.security/sentinel-allowlist.json", "oldString": "x", "newString": "y"}},
+        "deny",
+        expected_substr="self-protection",
+    ))
+
+    results.append(expect(
+        "Self-protection: bash writing to allowlist",
+        {"tool_name": "bash", "tool_input": {"command": "echo '{}' > .security/sentinel-allowlist.json"}},
+        "deny",
+        expected_substr="self-protection",
+    ))
+
+    results.append(expect(
+        "Self-protection: bash cat to iocs.json",
+        {"tool_name": "bash", "tool_input": {"command": "cat payload > references/iocs.json"}},
+        "deny",
+        expected_substr="self-protection",
+    ))
+
+    results.append(expect(
+        "Self-protection: block message tells human to edit manually",
+        {"tool_name": "write", "tool_input": {"filePath": ".security/sentinel-allowlist.json", "content": "{}"}},
+        "deny",
+        expected_substr="human must edit this file manually",
+    ))
+
+    results.append(expect(
+        "Self-protection: read tool should NOT be blocked (read-only)",
+        {"tool_name": "read", "tool_input": {"filePath": ".security/sentinel-allowlist.json"}},
+        "allow",
+    ))
+
+    results.append(expect(
+        "Human guidance: block message includes allowlist hint",
+        {"tool_name": "bash", "tool_input": {"command": "cat /etc/shadow"}},
+        "deny",
+        expected_substr="human to manually add",
+    ))
+
     # ---- SUMMARY -------------------------------------------------------------
 
     total = len(results)

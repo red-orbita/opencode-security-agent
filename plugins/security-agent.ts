@@ -80,8 +80,13 @@ export const SecurityAgentPlugin: Plugin = async ({
             throw new Error(
               `OpenCode Security Agent blocked a ${input.tool} call.\n` +
               `Reason: [CRITICAL] self-protection: writing to security configuration files ` +
-              `is not allowed from within the agent. Edit this file manually outside OpenCode.\n` +
-              `Matched: ${protectedMatch}`
+              `is not allowed from within the agent.\n` +
+              `Matched: ${protectedMatch}\n\n` +
+              `ACTION REQUIRED: If this operation needs an allowlist exception, ` +
+              `tell the human:\n` +
+              `  "Please add the following to .security/sentinel-allowlist.json ` +
+              `and save the file outside of OpenCode, then retry."\n` +
+              `The agent CANNOT modify this file — only a human can.`
             )
           }
         }

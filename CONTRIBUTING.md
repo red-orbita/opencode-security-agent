@@ -4,15 +4,16 @@
 
 1. Fork and clone the repository
 2. Make sure Python 3.8+ is installed
-3. Run the test suite: `python3 -m pytest tests/test_hook.py -v`
+3. Run the test suite: `python3 tests/test_hook.py -v`
 
 ## Development workflow
 
 1. Create a feature branch from `main`
 2. Make your changes
 3. Add or update tests in `tests/test_hook.py`
-4. Run the full test suite and ensure all tests pass
-5. Submit a pull request
+4. Run the full test suite and ensure all tests pass (55 tests as of v1.3.0)
+5. Note: if your changes touch self-protected files (allowlist, IOC database), you must test that the self-protection layer blocks agent writes correctly
+6. Submit a pull request
 
 ## What to contribute
 

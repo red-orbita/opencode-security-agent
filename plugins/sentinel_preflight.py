@@ -18,7 +18,7 @@ Decision values:
   "block"  -- tool call blocked. "reason" is shown to the user.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import json
 import os
@@ -447,6 +447,93 @@ def _collect_strings(obj):
     return out
 
 
+SELF_PROTECTED_PATTERNS = [
+    re.compile(r"sentinel-allowlist\.json", re.IGNORECASE),
+    re.compile(r"\.security/.*\.json$", re.IGNORECASE),
+    re.compile(r"mcp-sentinel-threats\.json", re.IGNORECASE),
+    re.compile(r"iocs\.json$", re.IGNORECASE),
+]
+
+WRITE_TOOLS = {"write", "edit", "bash"}
+
+
+def _is_self_protected_write(tool_name, tool_input):
+    """Check if tool call attempts to write to a security config file.
+
+    Returns the matched path string, or None.
+    """
+    if tool_name not in WRITE_TOOLS:
+        return None
+
+    candidates = [
+        tool_input.get("filePath", ""),
+        tool_input.get("newFilePath", ""),
+        tool_input.get("command", ""),
+        tool_input.get("content", ""),
+    ]
+    for val in candidates:
+        if not isinstance(val, str):
+            continue
+        for pattern in SELF_PROTECTED_PATTERNS:
+            if pattern.search(val):
+                return val
+    return None
+
+
+def _build_allowlist_hint(tool_input, reason):
+    """Build a concrete hint telling the human what to add to the allowlist.
+
+    Inspects the block reason and tool_input to suggest the minimal exception.
+    """
+    hint_lines = ["Suggested exception (for the human to add manually):"]
+
+    # Detect what kind of block it was from the reason string
+    reason_lc = reason.lower() if reason else ""
+
+    if "sensitive path" in reason_lc or "sensitive file" in reason_lc:
+        # Extract the path from filePath or command
+        target = tool_input.get("filePath", "") or ""
+        if not target:
+            # Try to extract from command
+            cmd = tool_input.get("command", "")
+            # Simple heuristic: grab the first path-like token
+            for token in cmd.split():
+                if "/" in token:
+                    target = token
+                    break
+        if target:
+            hint_lines.append(f'  Add to "paths": ["{target}"]')
+
+    elif "domain" in reason_lc or "network" in reason_lc or "url" in reason_lc:
+        # Try to extract domain from the reason or command
+        cmd = tool_input.get("command", "") or tool_input.get("url", "") or ""
+        import urllib.parse
+        try:
+            parsed = urllib.parse.urlparse(cmd if "://" in cmd else f"https://{cmd}")
+            domain = parsed.hostname
+            if domain:
+                hint_lines.append(f'  Add to "domains": ["{domain}"]')
+        except Exception:
+            hint_lines.append('  Add the domain to "domains": ["example.com"]')
+
+    elif "command" in reason_lc or "dangerous" in reason_lc:
+        cmd = tool_input.get("command", "")
+        if cmd:
+            # Suggest the base command (first token)
+            base = cmd.strip().split()[0] if cmd.strip() else cmd
+            hint_lines.append(f'  Add to "commands": ["{base}"]')
+
+    else:
+        hint_lines.append(
+            '  Add the appropriate exception to "paths", "domains", or "commands" in the allowlist.'
+        )
+
+    hint_lines.append(
+        "  Then re-run the operation."
+    )
+    return "\n".join(hint_lines)
+
+
 def decide(payload):
     """Given a tool call payload, return (decision, reason).
 
@@ -457,6 +544,15 @@ def decide(payload):
 
     tool_name = payload.get("tool_name") or payload.get("tool", "")
     tool_input = payload.get("tool_input") or payload.get("input") or {}
+
+    # --- Self-protection: block writes to allowlist/security config files ---
+    protected_match = _is_self_protected_write(tool_name, tool_input)
+    if protected_match:
+        return "block", (
+            "[CRITICAL] self-protection: writing to security configuration files "
+            "is not allowed from within the agent. "
+            "A human must edit this file manually outside of OpenCode."
+        )
 
     # All checks: ("3arg", fn) takes (tool_input, iocs, allowlist),
     #             ("2arg", fn) takes (tool_input, iocs)
@@ -516,11 +612,15 @@ def main():
 
     tool_name = payload.get("tool_name") or payload.get("tool", "<unknown>")
     if decision == "block":
+        # Build a human-friendly hint showing what to allowlist
+        tool_input = payload.get("tool_input") or payload.get("input") or {}
+        hint = _build_allowlist_hint(tool_input, reason)
         message = (
             f"OpenCode Security Agent blocked a {tool_name} call.\n"
             f"Reason: {reason}\n"
-            f"If this is a false positive, add an exception to "
-            f".security/sentinel-allowlist.json and retry."
+            f"If this is a false positive, ask the human to manually add an exception "
+            f"to .security/sentinel-allowlist.json (this file cannot be edited by the agent).\n"
+            f"{hint}"
         )
         print(json.dumps({
             "decision": "block",

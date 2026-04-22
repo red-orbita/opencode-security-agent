@@ -3,7 +3,7 @@
 Security agent for OpenCode. **v2 blocks malicious tool calls in real time** -- a plugin using `tool.execute.before` stops credential exfiltration, known-bad domains (`giftshop.club` from the Postmark MCP backdoor is hardcoded), reverse shells, `curl|bash` pipes, and prompt injection attempts before they execute. The v1 static scanner is still here: vulnerability database scanning, source integrity verification, and coherence analysis.
 
 **License:** [GPL-3.0](./LICENSE)
-**Latest version:** 1.2.0 -- April 2026 ([changelog](./CHANGELOG.md))
+**Latest version:** 1.3.0 -- April 2026 ([changelog](./CHANGELOG.md))
 
 ---
 
@@ -114,8 +114,8 @@ cp skills/security-agent/SKILL.md .opencode/skills/security-agent/
 ### Verify the install
 
 ```bash
-# 1. Run the regression suite (standalone hook)
-python3 -m pytest tests/test_hook.py -v
+# 1. Run the regression suite (standalone hook -- 55 tests)
+python3 tests/test_hook.py -v
 
 # 2. Start OpenCode and check the plugin loads
 opencode

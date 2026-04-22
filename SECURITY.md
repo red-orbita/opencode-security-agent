@@ -29,5 +29,11 @@ The following are in scope:
 
 | Version | Supported |
 |---|---|
-| 1.1.x | Yes |
-| < 1.1 | No |
+| 1.3.x | Yes |
+| 1.2.x | Yes |
+| < 1.2 | No |
+
+## Additional scope for v1.3+
+
+- Bypasses of the **self-protection layer** (agent writing to its own allowlist or IOC database)
+- Evasions of the **human-in-the-loop** requirement for allowlist modifications
