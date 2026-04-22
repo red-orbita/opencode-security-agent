@@ -3,7 +3,14 @@ set -euo pipefail
 # Update IOC database from multiple threat intelligence sources.
 #
 # Usage:
-#   bash scripts/update_iocs.sh
+#   bash scripts/update_iocs.sh           # uses SOPS or .env
+#   sops exec-env secrets.enc.yaml \
+#     'bash scripts/update_iocs.sh'       # explicit SOPS invocation
+#
+# Secrets loading order:
+#   1. SOPS encrypted file (secrets.enc.yaml) — preferred, safe to commit
+#   2. Plain .env file — fallback for local dev
+#   3. Environment variables already set
 #
 # Required env vars (set only the ones you have API keys for):
 #   URLHAUS_AUTH_KEY   - URLhaus abuse.ch (free, required since 2025)
@@ -18,19 +25,50 @@ set -euo pipefail
 # directly with bash (not through the OpenCode agent) or add the threat
 # intel API domains to .security/sentinel-allowlist.json.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CURL_TIMEOUT=30
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
-# Find .env by walking up from script directory
-_find_env() {
-    local dir="$1"
+# Find a file by walking up from a directory
+_find_file() {
+    local dir="$1" name="$2"
     while [ "$dir" != "/" ]; do
-        if [ -f "$dir/.env" ]; then
-            echo "$dir/.env"
+        if [ -f "$dir/$name" ]; then
+            echo "$dir/$name"
             return 0
         fi
         dir="$(dirname "$dir")"
     done
+    return 1
+}
+# Load secrets: SOPS first, then .env fallback
+_load_secrets() {
+    # 1. Try SOPS encrypted file
+    if command -v sops &>/dev/null; then
+        local sops_file
+        if sops_file=$(_find_file "$SCRIPT_DIR" "secrets.enc.yaml"); then
+            echo "Loading secrets from SOPS: $sops_file"
+            eval "$(sops -d "$sops_file" | python3 -c "
+import sys, shlex, yaml
+data = yaml.safe_load(sys.stdin)
+if data:
+    for k, v in data.items():
+        print(f'export {k}={shlex.quote(str(v))}')
+")"
+            return 0
+        fi
+    fi
+    # 2. Fallback to plain .env
+    local env_file
+    if env_file=$(_find_file "$SCRIPT_DIR" ".env"); then
+        echo "Loading secrets from .env: $env_file (consider migrating to SOPS)"
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file"
+        set +a
+        return 0
+    fi
+    echo "No secrets found (no secrets.enc.yaml or .env). Set env vars manually."
     return 1
 }
 # Wrapper: fetch URL, save to TMPFILE, show errors on failure
@@ -53,15 +91,7 @@ _fetch() {
     fi
     return 0
 }
-if ENV_FILE=$(_find_env "$SCRIPT_DIR"); then
-    set -a
-    # shellcheck disable=SC1090
-    source "$ENV_FILE"
-    set +a
-    echo "Loaded API keys from $ENV_FILE"
-else
-    echo "No .env found (walking up from $SCRIPT_DIR). Set env vars manually."
-fi
+_load_secrets || true
 ERRORS=0
 echo "=== IOC Database Update - $(date -Iseconds) ==="
 echo ""
@@ -89,21 +119,21 @@ echo ""
 # --- ThreatFox (requires Auth-Key since 2025) ---
 echo "[2/4] ThreatFox (abuse.ch)..."
 if [ -n "${THREATFOX_AUTH_KEY:-}" ]; then
-if _fetch "ThreatFox" \
-    -X POST "https://threatfox-api.abuse.ch/api/v1/" \
-    -H "Auth-Key: $THREATFOX_AUTH_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"query": "get_iocs", "days": 7}'; then
-    if python3 "$SCRIPT_DIR/import_threatfox.py" < "$TMPFILE"; then
-        echo "      OK"
+    if _fetch "ThreatFox" \
+        -X POST "https://threatfox-api.abuse.ch/api/v1/" \
+        -H "Auth-Key: $THREATFOX_AUTH_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{"query": "get_iocs", "days": 7}'; then
+        if python3 "$SCRIPT_DIR/import_threatfox.py" < "$TMPFILE"; then
+            echo "      OK"
+        else
+            echo "      FAILED (import error)"
+            ERRORS=$((ERRORS + 1))
+        fi
     else
-        echo "      FAILED (import error)"
+        echo "      FAILED (fetch error, non-fatal)"
         ERRORS=$((ERRORS + 1))
     fi
-else
-    echo "      FAILED (fetch error, non-fatal)"
-    ERRORS=$((ERRORS + 1))
-fi
 else
     echo "      SKIPPED (THREATFOX_AUTH_KEY not set)"
     echo "      Get a free key at: https://auth.abuse.ch/"

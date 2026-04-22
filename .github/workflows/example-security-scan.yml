@@ -1,0 +1,28 @@
+# Example: scan your project on every push and PR
+# Copy this file to .github/workflows/security-scan.yml in your project
+
+name: Security Scan
+on:
+  push:
+    branches: [main, master, developer]
+  pull_request:
+    branches: [main, master, developer]
+
+permissions:
+  contents: read
+  security-events: write  # required for SARIF upload
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan with OpenCode Security Agent
+        uses: red-orbita/opencode-security-agent@v1
+        with:
+          target: "."
+          include-community-rules: "true"
+          output-format: "text"
+          upload-sarif: "true"
+          fail-on-findings: "true"

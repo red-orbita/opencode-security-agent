@@ -10,6 +10,12 @@ for arg in "$@"; do
   case "$arg" in
     --user) SCOPE="user" ;;
     --project) SCOPE="project" ;;
+    -h|--help)
+      echo "Usage: bash scripts/uninstall.sh [--user|--project]"
+      echo "  --user     Remove from ~/.config/opencode/ (default)"
+      echo "  --project  Remove from .opencode/ in current directory"
+      exit 0
+      ;;
     *) echo "Unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
@@ -26,6 +32,10 @@ fi
 rm -f "$PLUGIN_DIR/security-agent.ts"
 rm -f "$PLUGIN_DIR/sentinel_preflight.py"
 rm -f "$PLUGIN_DIR/iocs.json"
+
+# Remove Semgrep rules and scan script
+rm -rf "$PLUGIN_DIR/../rules/semgrep"
+rm -f "$PLUGIN_DIR/../scripts/scan_semgrep.sh"
 
 # Remove skill
 rm -rf "$SKILL_DIR"

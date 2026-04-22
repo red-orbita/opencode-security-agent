@@ -1,0 +1,122 @@
+name: "OpenCode Security Agent Scan"
+description: >
+  Scan skills, MCP servers, and AI agent plugins for backdoors, credential
+  exfiltration, prompt injection, and supply-chain threats using custom
+  Semgrep rules from the OpenCode Security Agent project.
+author: "Red Orbita (rokitoh)"
+
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  target:
+    description: "Path to scan (file or directory)"
+    required: false
+    default: "."
+  include-community-rules:
+    description: "Include bundled community rules from semgrep/semgrep-rules"
+    required: false
+    default: "true"
+  output-format:
+    description: "Output format: text, json, or sarif"
+    required: false
+    default: "text"
+  upload-sarif:
+    description: "Upload SARIF results to GitHub Security tab"
+    required: false
+    default: "false"
+  fail-on-findings:
+    description: "Fail the workflow if findings are detected"
+    required: false
+    default: "true"
+
+outputs:
+  findings-count:
+    description: "Number of findings detected"
+    value: ${{ steps.scan.outputs.findings_count }}
+  sarif-file:
+    description: "Path to SARIF output file (if generated)"
+    value: ${{ steps.scan.outputs.sarif_file }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Semgrep
+      shell: bash
+      run: pip install semgrep
+
+    - name: Run scan
+      id: scan
+      shell: bash
+      run: |
+        RULES_DIR="${{ github.action_path }}/rules/semgrep"
+        CUSTOM_RULES="$RULES_DIR"
+        COMMUNITY_RULES="$RULES_DIR/community"
+        TARGET="${{ inputs.target }}"
+
+        SEMGREP_ARGS=(
+          --config "$CUSTOM_RULES"
+          --no-git-ignore
+          --metrics off
+        )
+
+        if [[ "${{ inputs.include-community-rules }}" == "true" ]] && [[ -d "$COMMUNITY_RULES" ]]; then
+          SEMGREP_ARGS+=(--config "$COMMUNITY_RULES")
+        fi
+
+        if [[ "${{ inputs.fail-on-findings }}" == "true" ]]; then
+          SEMGREP_ARGS+=(--error)
+        fi
+
+        # Always generate JSON to count findings
+        SEMGREP_ARGS_JSON=("${SEMGREP_ARGS[@]}" --json)
+
+        set +e
+        SCAN_OUTPUT=$(semgrep "${SEMGREP_ARGS_JSON[@]}" "$TARGET" 2>/dev/null)
+        EXIT_CODE=$?
+        set -e
+
+        FINDINGS_COUNT=$(echo "$SCAN_OUTPUT" | python3 -c "
+        import sys, json
+        try:
+            d = json.load(sys.stdin)
+            print(len(d.get('results', [])))
+        except:
+            print('0')
+        " 2>/dev/null || echo "0")
+
+        echo "findings_count=$FINDINGS_COUNT" >> "$GITHUB_OUTPUT"
+
+        # Generate requested output format
+        FORMAT="${{ inputs.output-format }}"
+        if [[ "$FORMAT" == "sarif" ]] || [[ "${{ inputs.upload-sarif }}" == "true" ]]; then
+          SARIF_FILE="semgrep-results.sarif"
+          semgrep "${SEMGREP_ARGS[@]}" --sarif --output "$SARIF_FILE" "$TARGET" 2>/dev/null || true
+          echo "sarif_file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [[ "$FORMAT" == "json" ]]; then
+          echo "$SCAN_OUTPUT"
+        elif [[ "$FORMAT" == "sarif" ]]; then
+          cat "$SARIF_FILE" 2>/dev/null || true
+        else
+          # Run again in text mode for human-readable output
+          semgrep "${SEMGREP_ARGS[@]}" "$TARGET" || true
+        fi
+
+        echo ""
+        echo "=== Scan Summary ==="
+        echo "Findings: $FINDINGS_COUNT"
+
+        if [[ "${{ inputs.fail-on-findings }}" == "true" ]] && [[ $FINDINGS_COUNT -gt 0 ]]; then
+          echo "::error::OpenCode Security Agent found $FINDINGS_COUNT security issue(s)"
+          exit 1
+        fi
+
+    - name: Upload SARIF to GitHub Security
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.sarif_file != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif_file }}
+        category: "opencode-security-agent"

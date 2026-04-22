@@ -185,6 +185,38 @@ For each item in the inventory, search across all available sources:
 
 ### Step 3: Static analysis of skill files
 
+#### Step 3a (pre-LLM): Semgrep automated scan
+
+Before doing manual pattern analysis, run the bundled Semgrep rules if `semgrep` is available.
+These rules detect MCP/skill-specific threats (credential exfiltration, network exfiltration,
+dangerous commands, prompt injection, crypto mining, obfuscation) with zero LLM cost.
+
+```bash
+# Scan a specific skill directory
+bash scripts/scan_semgrep.sh /path/to/skill/
+
+# JSON output for programmatic processing
+bash scripts/scan_semgrep.sh /path/to/skill/ --json
+
+# SARIF output for GitHub Security tab
+bash scripts/scan_semgrep.sh /path/to/skill/ --sarif
+
+# Skip community rules (custom only)
+bash scripts/scan_semgrep.sh /path/to/skill/ --no-community
+```
+
+If semgrep is not installed, skip this step and proceed to manual analysis below.
+If semgrep finds issues, include them in the report verbatim -- they are high-confidence
+findings that don't require LLM interpretation.
+
+The custom rules cover 6 categories:
+- **credential-exfiltration** — file reads of `~/.ssh/`, `~/.aws/`, env var harvesting, env dumps
+- **network-exfiltration** — requests to pastebin/transfer.sh/webhook.site/ngrok, raw IP URLs, hidden BCC (Postmark pattern), giftshop.club
+- **dangerous-commands** — curl|bash, reverse shells, base64|sh, .bashrc hijack, fork bombs, eval/exec
+- **supply-chain-patterns** — crypto mining (xmrig, stratum, pool domains), prompt injection phrases, base64+send obfuscation
+
+#### Step 3b (LLM): Manual pattern analysis
+
 For each installed skill, read its SKILL.md and any bundled scripts. Flag these patterns:
 
 **Critical (block/alert immediately):**
@@ -207,19 +239,19 @@ For each installed skill, read its SKILL.md and any bundled scripts. Flag these 
 - Skills from unverified sources
 - Missing or vague descriptions
 
-### Step 3b: Coherence analysis
+### Step 3c: Coherence analysis
 
 1. **Identify the skill's stated purpose.**
 2. **For every action the skill takes, ask: "Does this make sense for that purpose?"**
 3. **Flag incoherences by severity**
 4. **Present the coherence map to the user**
 
-### Step 3c: Update diff analysis
+### Step 3d: Update diff analysis
 
 Uses the threat database snapshots to detect changes since last scan and runs
 coherence analysis on the diff.
 
-### Step 3d: Generate community-compatible threat reports
+### Step 3e: Generate community-compatible threat reports
 
 Save structured reports to `.security/reports/`.
 
@@ -259,6 +291,7 @@ This skill works with OpenCode (TUI, CLI, desktop, web). It uses:
 
 The v2 runtime plugin additionally requires:
 - **Python 3** — to execute `sentinel_preflight.py`
+- **Semgrep** (optional) — for automated static analysis in Step 3a. Install with `pip install semgrep`
 
 No external dependencies or API keys required.
 
@@ -270,12 +303,21 @@ opencode-security-agent/
 ├── README.md                        # user-facing overview
 ├── CHANGELOG.md                     # version history
 ├── LICENSE                          # GPL-3.0
+├── action.yml                       # GitHub Action (reusable)
 ├── plugins/                         # v2 runtime protection
 │   ├── security-agent.ts            # OpenCode plugin (tool.execute.before)
 │   └── sentinel_preflight.py        # Python pattern matcher
 ├── scripts/
 │   ├── install.sh                   # install plugin + skill
-│   └── uninstall.sh                 # remove plugin + skill
+│   ├── uninstall.sh                 # remove plugin + skill
+│   └── scan_semgrep.sh              # Semgrep static scanner wrapper
+├── rules/
+│   └── semgrep/                     # custom + community Semgrep rules
+│       ├── credential-exfiltration.yaml
+│       ├── network-exfiltration.yaml
+│       ├── dangerous-commands.yaml
+│       ├── supply-chain-patterns.yaml
+│       └── community/               # 40 rules from semgrep/semgrep-rules
 ├── skills/
 │   └── security-agent/
 │       └── SKILL.md                 # this file (also placed here for discovery)
@@ -284,5 +326,7 @@ opencode-security-agent/
 │   ├── threat-sources.md            # vulnerability database reference
 │   └── threat-db-template.json      # local threat DB schema
 └── tests/
-    └── test_hook.py                 # regression tests
+    ├── test_hook.py                 # regression tests for runtime hook (55)
+    ├── test_semgrep_rules.py        # regression tests for Semgrep rules (32)
+    └── semgrep-samples/             # malicious + benign test samples
 ```

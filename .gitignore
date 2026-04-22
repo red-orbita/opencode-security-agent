@@ -12,6 +12,7 @@ env/
 # Environment / secrets
 .env
 .env.*
+secrets.enc.yaml
 
 # IDE
 .vscode/

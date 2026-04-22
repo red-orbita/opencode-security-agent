@@ -53,15 +53,32 @@ chmod +x "$PLUGIN_DIR/sentinel_preflight.py"
 # Copy IOCs alongside plugin (for the Python script to find)
 cp "$REPO_DIR/references/iocs.json" "$PLUGIN_DIR/"
 
+# Copy Semgrep rules and scan script
+RULES_DEST="$PLUGIN_DIR/../rules/semgrep"
+SCRIPTS_DEST="$PLUGIN_DIR/../scripts"
+mkdir -p "$RULES_DEST"
+mkdir -p "$SCRIPTS_DEST"
+cp "$REPO_DIR/rules/semgrep/"*.yaml "$RULES_DEST/"
+cp -r "$REPO_DIR/rules/semgrep/community" "$RULES_DEST/"
+cp "$REPO_DIR/scripts/scan_semgrep.sh" "$SCRIPTS_DEST/"
+chmod +x "$SCRIPTS_DEST/scan_semgrep.sh"
+
 # Copy skill
 cp "$REPO_DIR/skills/security-agent/SKILL.md" "$SKILL_DIR/"
 
 echo "OpenCode Security Agent installed successfully!"
 echo ""
-echo "  Plugin: $PLUGIN_DIR/security-agent.ts"
-echo "  Hook:   $PLUGIN_DIR/sentinel_preflight.py"
-echo "  IOCs:   $PLUGIN_DIR/iocs.json"
-echo "  Skill:  $SKILL_DIR/SKILL.md"
+echo "  Plugin:  $PLUGIN_DIR/security-agent.ts"
+echo "  Hook:    $PLUGIN_DIR/sentinel_preflight.py"
+echo "  IOCs:    $PLUGIN_DIR/iocs.json"
+echo "  Rules:   $RULES_DEST/ ($(ls "$RULES_DEST"/*.yaml 2>/dev/null | wc -l) Semgrep rule files)"
+echo "  Skill:   $SKILL_DIR/SKILL.md"
+echo ""
+if command -v semgrep >/dev/null 2>&1; then
+  echo "  Semgrep: $(semgrep --version) (installed)"
+else
+  echo "  Semgrep: not found (optional — install with: pip install semgrep)"
+fi
 echo ""
 echo "Restart OpenCode for the plugin to take effect."
 echo "To uninstall: run scripts/uninstall.sh"

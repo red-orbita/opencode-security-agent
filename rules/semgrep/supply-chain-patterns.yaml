@@ -1,0 +1,97 @@
+rules:
+  # ─── Crypto mining ─────────────────────────────────────────────────────
+
+  - id: stratum-protocol
+    pattern-regex: stratum\+tcp://
+    message: >
+      Stratum mining protocol URL detected. This is used to connect to
+      cryptocurrency mining pools.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: crypto-mining
+      confidence: HIGH
+
+  - id: xmrig-binary
+    pattern-regex: xmrig
+    message: >
+      Reference to xmrig cryptocurrency miner.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: crypto-mining
+      confidence: HIGH
+
+  - id: mining-pool-domains
+    pattern-regex: (pool\.minexmr\.com|pool\.supportxmr\.com|mine\.zergpool\.com|hashvault\.pro|nanopool\.org|2miners\.com|f2pool\.com|unmineable\.com)
+    message: >
+      Known cryptocurrency mining pool domain detected.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: crypto-mining
+      confidence: HIGH
+
+  # ─── Prompt injection ──────────────────────────────────────────────────
+
+  - id: prompt-injection-phrases
+    pattern-regex: (ignore\s+(previous|all|prior)\s+instructions|act\s+as\s+root|bypass\s+security|hide\s+this\s+from\s+the\s+user|you\s+are\s+now\s+jailbroken|disregard\s+(safety|system)\s+(guidelines|prompt)|override\s+safety)
+    message: >
+      Prompt injection phrase detected. This text attempts to override
+      the AI agent's safety instructions.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: prompt-injection
+      confidence: HIGH
+      references:
+        - https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/
+
+  # ─── Obfuscation ──────────────────────────────────────────────────────
+
+  - id: base64-encode-and-send-python
+    patterns:
+      - pattern: |
+          $ENCODED = base64.b64encode(...)
+          ...
+          requests.$METHOD($URL, ..., data=$ENCODED, ...)
+    message: >
+      Data is base64-encoded and then sent over HTTP. This is a common
+      pattern for obfuscated exfiltration.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: obfuscation
+      confidence: HIGH
+
+  - id: base64-encode-and-send-js
+    patterns:
+      - pattern: |
+          $ENCODED = btoa(...)
+          ...
+          fetch($URL, {..., body: $ENCODED, ...})
+    message: >
+      Data is base64-encoded and sent via fetch. Common obfuscated
+      exfiltration pattern.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: obfuscation
+      confidence: HIGH
+
+  - id: hex-encoded-strings
+    patterns:
+      - pattern-either:
+          - pattern: bytes.fromhex("$HEX")
+          - pattern: bytearray.fromhex("$HEX")
+    metavariable-regex:
+      metavariable: $HEX
+      regex: "[0-9a-fA-F]{20,}"
+    message: >
+      Long hex-encoded string decoded at runtime. This may be hiding
+      a URL, command, or other payload.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      category: obfuscation
+      confidence: MEDIUM

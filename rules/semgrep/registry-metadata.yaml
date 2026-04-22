@@ -1,0 +1,56 @@
+# Semgrep Registry metadata
+# https://semgrep.dev/docs/contributing/contributing-to-semgrep-rules-repository/
+
+rules-source:
+  name: opencode-security-agent
+  url: https://github.com/red-orbita/opencode-security-agent
+  license: GPL-3.0
+
+registry:
+  namespace: red-orbita
+  collection: ai-agent-security
+
+metadata:
+  description: >
+    Custom Semgrep rules for detecting backdoors, credential exfiltration,
+    prompt injection, and supply-chain attacks in AI agent skills and MCP
+    servers. Designed for the OpenCode ecosystem but applicable to any
+    LLM agent plugin architecture.
+  author: rokitoh (Red Orbita)
+  tags:
+    - security
+    - ai
+    - mcp
+    - llm
+    - supply-chain
+    - backdoor
+    - credential-exfiltration
+    - prompt-injection
+
+rule-files:
+  custom:
+    - rules/semgrep/credential-exfiltration.yaml
+    - rules/semgrep/network-exfiltration.yaml
+    - rules/semgrep/dangerous-commands.yaml
+    - rules/semgrep/supply-chain-patterns.yaml
+
+categories:
+  - id: credential-exfiltration
+    name: Credential Exfiltration
+    description: Detects reading of sensitive files and environment variables
+    severity: ERROR/WARNING
+
+  - id: network-exfiltration
+    name: Network Exfiltration
+    description: Detects data exfiltration via known services, raw IPs, hidden BCC
+    severity: ERROR/WARNING
+
+  - id: dangerous-commands
+    name: Dangerous Commands
+    description: Detects reverse shells, curl|bash, eval/exec, persistence mechanisms
+    severity: ERROR/WARNING
+
+  - id: supply-chain-patterns
+    name: Supply Chain Patterns
+    description: Detects crypto mining, prompt injection, obfuscation techniques
+    severity: ERROR/WARNING

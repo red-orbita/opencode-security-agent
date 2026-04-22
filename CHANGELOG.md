@@ -3,6 +3,69 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.4.0] -- 2026-04-22
+
+### Added
+
+- **Semgrep rule test suite** (`tests/test_semgrep_rules.py`). 32 regression tests
+  covering all custom and community rules. 6 malicious samples reproducing real
+  attack patterns (Postmark BCC backdoor, credential harvesting, reverse shell +
+  persistence, prompt injection in MCP tools, deserialization + DNS exfiltration,
+  child_process abuse). 4 benign samples verifying zero false positives.
+- **Malicious samples benchmark** (`tests/semgrep-samples/`). Reproducible test
+  corpus for Semgrep rules based on real-world incidents.
+- **SARIF output** (`--sarif` flag in `scan_semgrep.sh`). Generates SARIF format
+  compatible with GitHub Code Scanning / Security tab.
+- **GitHub Action** (`action.yml`). Reusable action that any repository can use to
+  scan for AI agent security issues. Supports SARIF upload, configurable output
+  format, and fail-on-findings.
+- **Example workflow** (`.github/workflows/example-security-scan.yml`). Copy-paste
+  ready CI/CD integration.
+- **Semgrep Registry metadata** (`rules/semgrep/registry-metadata.yaml`). Metadata
+  for publishing custom rules to the Semgrep Registry.
+
+### Fixed
+
+- **False positive in `env-var-harvest-python`**. Rule now uses `metavariable-regex`
+  inside `patterns` block (not at top level), so `os.environ.get("PROJECT_NAME")`
+  no longer triggers a finding.
+
+## [1.3.0] -- 2026-04-22
+
+### Added
+
+- **Semgrep static analysis integration.** Custom rules in `rules/semgrep/` detect
+  MCP/skill-specific threats before LLM analysis -- zero LLM cost, deterministic results.
+  4 rule files covering 6 threat categories:
+  - `credential-exfiltration.yaml` — credential file reads (Python/JS/TS), env var
+    harvesting (`*_API_KEY`, `*_SECRET`, `*_TOKEN`), full environment dumps.
+  - `network-exfiltration.yaml` — requests to exfil services (pastebin, transfer.sh,
+    webhook.site, ngrok), raw IP URLs, hidden BCC fields (Postmark pattern),
+    hardcoded `giftshop.club` detection.
+  - `dangerous-commands.yaml` — curl|bash, wget|sh, reverse shells (bash, netcat,
+    python), base64|sh, .bashrc hijack, chmod 777, fork bombs, eval/exec, subprocess
+    with shell=True.
+  - `supply-chain-patterns.yaml` — crypto mining (xmrig, stratum+tcp, pool domains),
+    prompt injection phrases, base64-encode-and-send obfuscation, hex-encoded payloads.
+- **40 bundled community rules from [semgrep/semgrep-rules](https://github.com/semgrep/semgrep-rules).**
+  Curated selection of rules relevant to backdoor detection, organized in
+  `rules/semgrep/community/`:
+  - `ai-mcp/` (11 rules) — MCP command injection, tool poisoning, SSRF, credential
+    leaks in responses, hardcoded config secrets, LLM-output-to-exec, LangChain
+    dangerous exec, DNS exfiltration in hooks, wget|bash droppers, sensitive file access.
+  - `python-exec/` (11 rules) — dangerous system calls, subprocess, spawn, os.exec,
+    eval, exec, compile, paramiko remote exec, python reverse shells.
+  - `python-deser/` (4 rules) — pickle, jsonpickle, pyyaml unsafe load, marshal.
+  - `python-secrets/` (2 rules) — hardcoded passwords, credential logging.
+  - `javascript-exec/` (6 rules) — child_process, eval, spawn shell, dangerous spawn,
+    code string concat, unsafe dynamic method.
+  - `generic-secrets/` (5 rules) — private keys, generic secrets, API keys, GitHub
+    tokens, AWS secret keys embedded in code.
+  - `generic-shells/` (1 rule) — bash reverse shell patterns.
+- **`scripts/scan_semgrep.sh`** — wrapper script for running Semgrep scans. Includes
+  community rules by default; use `--no-community` to skip. Supports `--json` output
+  and `--self-test` for rule validation.
+
 ## [1.2.0] -- 2026-04-22
 
 ### Added

@@ -1,0 +1,112 @@
+rules:
+  # ─── Network exfiltration ──────────────────────────────────────────────
+
+  - id: fetch-to-exfil-service-js
+    patterns:
+      - pattern-either:
+          - pattern: fetch("$URL", ...)
+          - pattern: axios.post("$URL", ...)
+          - pattern: axios.put("$URL", ...)
+          - pattern: axios("$URL", ...)
+    metavariable-regex:
+      metavariable: $URL
+      regex: .*(pastebin\.com|transfer\.sh|webhook\.site|requestbin|ngrok\.io|serveo\.net|giftshop\.club|pipedream\.net|hookbin\.com|requestcatcher\.com|burpcollaborator).*
+    message: >
+      HTTP request to known exfiltration service "$URL". This is a
+      strong indicator of data exfiltration.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: network-exfiltration
+      confidence: HIGH
+      references:
+        - https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html
+
+  - id: fetch-to-exfil-service-python
+    patterns:
+      - pattern-either:
+          - pattern: requests.post("$URL", ...)
+          - pattern: requests.put("$URL", ...)
+          - pattern: requests.get("$URL", ...)
+          - pattern: urllib.request.urlopen("$URL")
+          - pattern: httpx.post("$URL", ...)
+    metavariable-regex:
+      metavariable: $URL
+      regex: .*(pastebin\.com|transfer\.sh|webhook\.site|requestbin|ngrok\.io|serveo\.net|giftshop\.club|pipedream\.net|hookbin\.com|requestcatcher\.com|burpcollaborator).*
+    message: >
+      HTTP request to known exfiltration service "$URL".
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: network-exfiltration
+      confidence: HIGH
+
+  - id: fetch-to-raw-ip-js
+    patterns:
+      - pattern-either:
+          - pattern: fetch("$URL", ...)
+          - pattern: axios.post("$URL", ...)
+          - pattern: axios.get("$URL", ...)
+    metavariable-regex:
+      metavariable: $URL
+      regex: https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/.*)?$
+    message: >
+      HTTP request to a raw IP address "$URL". Legitimate services use
+      domain names; raw IPs are a common C2/exfiltration indicator.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      category: network-exfiltration
+      confidence: MEDIUM
+
+  - id: fetch-to-raw-ip-python
+    patterns:
+      - pattern-either:
+          - pattern: requests.post("$URL", ...)
+          - pattern: requests.get("$URL", ...)
+          - pattern: urllib.request.urlopen("$URL")
+    metavariable-regex:
+      metavariable: $URL
+      regex: https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/.*)?$
+    message: >
+      HTTP request to a raw IP address "$URL".
+    languages: [python]
+    severity: WARNING
+    metadata:
+      category: network-exfiltration
+      confidence: MEDIUM
+
+  # ─── Hidden BCC / email exfiltration (Postmark pattern) ────────────────
+
+  - id: hidden-bcc-postmark
+    patterns:
+      - pattern-either:
+          - pattern: |
+              {..., "Bcc": "$ADDR", ...}
+          - pattern: |
+              {..., "bcc": "$ADDR", ...}
+          - pattern: |
+              $X["Bcc"] = "$ADDR"
+          - pattern: |
+              $X["bcc"] = "$ADDR"
+    message: >
+      BCC field set to "$ADDR". The Postmark MCP backdoor used a hidden
+      BCC to exfiltrate every outgoing email. Verify this is intentional.
+    languages: [javascript, typescript, python, json]
+    severity: ERROR
+    metadata:
+      category: network-exfiltration
+      confidence: HIGH
+      references:
+        - https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html
+
+  - id: giftshop-club-domain
+    pattern-regex: giftshop\.club
+    message: >
+      Reference to giftshop.club -- the confirmed C2 domain from the
+      Postmark MCP backdoor incident. This is ALWAYS malicious.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: network-exfiltration
+      confidence: HIGH

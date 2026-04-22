@@ -18,7 +18,7 @@ Decision values:
   "block"  -- tool call blocked. "reason" is shown to the user.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import json
 import os
@@ -461,22 +461,48 @@ def _is_self_protected_write(tool_name, tool_input):
     """Check if tool call attempts to write to a security config file.
 
     Returns the matched path string, or None.
+    Only checks file paths and bash write commands -- not file content,
+    to avoid false positives on documentation or code that mentions
+    security file names.
     """
     if tool_name not in WRITE_TOOLS:
         return None
 
-    candidates = [
-        tool_input.get("filePath", ""),
-        tool_input.get("newFilePath", ""),
-        tool_input.get("command", ""),
-        tool_input.get("content", ""),
-    ]
-    for val in candidates:
-        if not isinstance(val, str):
-            continue
-        for pattern in SELF_PROTECTED_PATTERNS:
-            if pattern.search(val):
-                return val
+    # For write/edit tools, only check the target file path
+    if tool_name in ("write", "edit"):
+        candidates = [
+            tool_input.get("filePath", ""),
+            tool_input.get("newFilePath", ""),
+        ]
+        for val in candidates:
+            if not isinstance(val, str):
+                continue
+            for pattern in SELF_PROTECTED_PATTERNS:
+                if pattern.search(val):
+                    return val
+        return None
+
+    # For bash, only block commands that write to protected files
+    if tool_name == "bash":
+        cmd = tool_input.get("command", "")
+        if not isinstance(cmd, str):
+            return None
+        write_patterns = [
+            re.compile(r">\s*\S*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r"tee\s+\S*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r"cp\s+.*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r"mv\s+.*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r"rm\s+.*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r">\s*\S*iocs\.json", re.IGNORECASE),
+            re.compile(r"tee\s+\S*iocs\.json", re.IGNORECASE),
+            re.compile(r"rm\s+.*iocs\.json", re.IGNORECASE),
+            re.compile(r">\s*\S*mcp-sentinel-threats", re.IGNORECASE),
+            re.compile(r"rm\s+.*mcp-sentinel-threats", re.IGNORECASE),
+        ]
+        for wp in write_patterns:
+            if wp.search(cmd):
+                return cmd
+
     return None
 
 

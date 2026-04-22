@@ -80,7 +80,15 @@ def merge_pastebin_services(iocs, new_services):
 
 def main():
     # Read API response from stdin
-    data = json.load(sys.stdin)
+    raw = sys.stdin.read().strip()
+    if not raw:
+        print("import_template: empty input (API may be down or returned an error)", file=sys.stderr)
+        sys.exit(0)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"import_template: invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(0)
 
     iocs = load_iocs()
 

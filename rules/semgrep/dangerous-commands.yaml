@@ -1,0 +1,141 @@
+rules:
+  # ─── Dangerous shell execution ─────────────────────────────────────────
+
+  - id: curl-pipe-bash
+    pattern-regex: curl\s+.*\|\s*(ba)?sh
+    message: >
+      curl piped to shell. This executes arbitrary remote code without
+      inspection -- a classic supply-chain attack vector.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: wget-pipe-bash
+    pattern-regex: wget\s+.*-O\s*-\s*\|\s*(ba)?sh
+    message: >
+      wget piped to shell. Executes arbitrary remote code.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: reverse-shell-bash
+    pattern-regex: bash\s+-i\s+>&\s*/dev/tcp/
+    message: >
+      Bash reverse shell detected. This opens an interactive shell
+      connection to a remote host.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: netcat-shell
+    pattern-regex: nc\s+.*-e\s+/bin/(ba)?sh
+    message: >
+      Netcat reverse shell. Opens a remote shell via nc.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: python-reverse-shell
+    pattern-regex: python3?\s+-c\s+.*socket.*connect.*
+    message: >
+      Python one-liner with socket connection -- likely a reverse shell.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: base64-decode-exec
+    pattern-regex: base64\s+(-d|--decode)\s*\|\s*(ba)?sh
+    message: >
+      Base64-decoded content piped to shell. This is a common obfuscation
+      technique to hide malicious commands.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: bashrc-append
+    pattern-regex: '>>\s*~/?\.(bashrc|zshrc|profile|bash_profile)'
+    message: >
+      Appending to shell profile file. This achieves persistence across
+      sessions -- a common backdoor technique.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  - id: chmod-777
+    pattern-regex: chmod\s+777\s+
+    message: >
+      Setting world-writable permissions (777). This removes all access
+      controls from the target file.
+    languages: [regex]
+    severity: WARNING
+    metadata:
+      category: dangerous-commands
+      confidence: MEDIUM
+
+  - id: fork-bomb
+    pattern-regex: ":\\(\\)\\s*\\{.*\\|.*\\}"
+    message: >
+      Fork bomb pattern detected. This will crash the system by
+      exhausting process resources.
+    languages: [regex]
+    severity: ERROR
+    metadata:
+      category: dangerous-commands
+      confidence: HIGH
+
+  # ─── Code execution / eval ─────────────────────────────────────────────
+
+  - id: eval-usage-python
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: exec($X)
+          - pattern: compile($X, ...)
+    message: >
+      Dynamic code execution via eval/exec/compile. If $X comes from
+      external input, this enables arbitrary code execution.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      category: dangerous-commands
+      confidence: MEDIUM
+
+  - id: eval-usage-js
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: new Function($X)
+          - pattern: new Function(..., $X)
+    message: >
+      Dynamic code execution via eval/Function constructor. If $X comes
+      from external input, this enables arbitrary code execution.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      category: dangerous-commands
+      confidence: MEDIUM
+
+  - id: subprocess-shell-true
+    pattern: subprocess.run($CMD, ..., shell=True, ...)
+    message: >
+      subprocess.run with shell=True. If $CMD contains user input, this
+      enables shell injection. Use shell=False with a list of arguments.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      category: dangerous-commands
+      confidence: MEDIUM
