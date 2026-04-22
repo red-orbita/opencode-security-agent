@@ -51,7 +51,15 @@ def ip_to_regex(ip):
 
 
 def main():
-    data = json.load(sys.stdin)
+    raw = sys.stdin.read().strip()
+    if not raw:
+        print("AbuseIPDB: empty input (API may be down or returned an error)", file=sys.stderr)
+        sys.exit(0)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"AbuseIPDB: invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(0)
     iocs = load_iocs()
 
     # AbuseIPDB blacklist: {"data": [{"ipAddress": "...", "abuseConfidenceScore": N}, ...]}

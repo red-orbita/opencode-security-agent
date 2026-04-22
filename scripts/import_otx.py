@@ -43,7 +43,15 @@ def merge_domains(iocs, new_domains):
 
 
 def main():
-    data = json.load(sys.stdin)
+    raw = sys.stdin.read().strip()
+    if not raw:
+        print("OTX: empty input (API may be down or returned an error)", file=sys.stderr)
+        sys.exit(0)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"OTX: invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(0)
     iocs = load_iocs()
 
     # OTX subscribed pulses: {"results": [{"indicators": [...], ...}, ...]}

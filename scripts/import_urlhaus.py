@@ -61,7 +61,15 @@ def extract_domain(url):
 
 
 def main():
-    data = json.load(sys.stdin)
+    raw = sys.stdin.read().strip()
+    if not raw:
+        print("URLhaus: empty input (API may be down or returned an error)", file=sys.stderr)
+        sys.exit(0)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"URLhaus: invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(0)
     iocs = load_iocs()
 
     # URLhaus returns {"urls": [...]} for recent/bulk queries

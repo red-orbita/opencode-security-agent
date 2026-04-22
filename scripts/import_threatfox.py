@@ -84,7 +84,15 @@ def extract_domain(ioc_value):
 
 
 def main():
-    data = json.load(sys.stdin)
+    raw = sys.stdin.read().strip()
+    if not raw:
+        print("ThreatFox: empty input (API may be down or returned an error)", file=sys.stderr)
+        sys.exit(0)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"ThreatFox: invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(0)
     iocs = load_iocs()
 
     # ThreatFox response: {"query_status": "ok", "data": [...]}
