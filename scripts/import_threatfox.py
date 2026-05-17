@@ -24,31 +24,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-IOCS_PATH = Path(__file__).parent.parent / "references" / "iocs.json"
-
-
-def load_iocs():
-    if IOCS_PATH.exists():
-        return json.loads(IOCS_PATH.read_text())
-    return {}
-
-
-def save_iocs(iocs):
-    IOCS_PATH.write_text(json.dumps(iocs, indent=2) + "\n")
-
-
-def merge_domains(iocs, new_domains):
-    existing = iocs.setdefault("suspicious_network", {})
-    known = existing.setdefault("known_malicious_domains", [])
-    existing_set = {e["domain"].lower() for e in known}
-
-    added = 0
-    for entry in new_domains:
-        if entry["domain"].lower() not in existing_set:
-            known.append(entry)
-            existing_set.add(entry["domain"].lower())
-            added += 1
-    return added
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+from ioc_utils import load_iocs, save_iocs, merge_domains
 
 
 def extract_domain(ioc_value):

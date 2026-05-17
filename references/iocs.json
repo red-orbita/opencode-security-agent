@@ -2,7 +2,6 @@
   "schema_version": "1.1",
   "description": "OpenCode Security Agent Indicators of Compromise (IOCs). Patterns, paths, and domains known to be associated with skill/MCP attacks. Maintained locally so runtime protection works offline.",
   "last_updated": "2026-04-22",
-
   "sensitive_paths": {
     "description": "File paths a skill should almost never touch unless that's its explicit purpose.",
     "patterns": [
@@ -57,7 +56,6 @@
       "(?i)\\.key$"
     ]
   },
-
   "sensitive_env_vars": {
     "description": "Environment variables commonly containing secrets.",
     "patterns": [
@@ -84,7 +82,6 @@
       "(?i).*_PASSWORD$"
     ]
   },
-
   "suspicious_network": {
     "description": "Network patterns associated with exfiltration.",
     "known_malicious_domains": [
@@ -105,12 +102,32 @@
       }
     ],
     "suspicious_tlds": [
-      ".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".work", ".click"
+      ".tk",
+      ".ml",
+      ".ga",
+      ".cf",
+      ".gq",
+      ".xyz",
+      ".top",
+      ".work",
+      ".click"
     ],
     "pastebin_style": [
-      "pastebin.com", "paste.ee", "hastebin.com", "dpaste.com", "termbin.com",
-      "transfer.sh", "0x0.st", "file.io", "bashupload.com",
-      "ix.io", "sprunge.us", "cl1p.net", "justpaste.it", "ghostbin.com", "rentry.co"
+      "pastebin.com",
+      "paste.ee",
+      "hastebin.com",
+      "dpaste.com",
+      "termbin.com",
+      "transfer.sh",
+      "0x0.st",
+      "file.io",
+      "bashupload.com",
+      "ix.io",
+      "sprunge.us",
+      "cl1p.net",
+      "justpaste.it",
+      "ghostbin.com",
+      "rentry.co"
     ],
     "suspicious_patterns": [
       "https?://\\d+\\.\\d+\\.\\d+\\.\\d+",
@@ -124,7 +141,6 @@
       "(?i)burpcollaborator\\.net"
     ]
   },
-
   "dangerous_commands": {
     "description": "Shell command patterns indicating exfiltration, RCE, or sandbox escape.",
     "patterns": [
@@ -146,7 +162,6 @@
       "(?i)python\\s+-m\\s+http\\.server",
       "(?i)scp\\s+.*@",
       "(?i)rsync\\s+.*@",
-
       "(?i)nslookup\\s+.*\\$\\(",
       "(?i)dig\\s+.*\\$\\(",
       "(?i)host\\s+.*\\$\\(",
@@ -154,7 +169,6 @@
       "(?i)nslookup\\s+`",
       "(?i)dig\\s+`",
       "(?i)ping\\s+`",
-
       "(?i)python3?\\s+-c\\s+.*\\b(socket|subprocess|os\\.system|os\\.popen|commands|pty\\.spawn|exec|eval)\\b",
       "(?i)ruby\\s+-e\\s+.*\\b(system|exec|spawn|IO\\.popen|open\\s*\\(\\s*['\"]\\|)\\b",
       "(?i)perl\\s+-e\\s+.*\\b(system|exec|open\\s*\\(.*\\|)\\b",
@@ -162,7 +176,6 @@
       "(?i)node\\s+-e\\s+.*\\b(child_process|exec|spawn|execSync)\\b",
       "(?i)php\\s+-r\\s+.*\\b(system|exec|shell_exec|passthru|popen|proc_open)\\b",
       "(?i)lua\\s+-e\\s+.*\\bos\\.execute\\b",
-
       "(?i)(^|;|\\||&&)\\s*env\\s*(\\||$|\\s+\\|)",
       "(?i)(^|;|\\||&&)\\s*printenv\\b",
       "(?i)\\benv\\s*\\|\\s*grep",
@@ -170,19 +183,16 @@
       "(?i)\\bset\\s*\\|\\s*grep\\s+.*(key|secret|token|password|cred)",
       "(?i)\\bhistory\\s*\\|\\s*grep\\s+.*(password|key|secret|token|cred)",
       "(?i)\\bhistory\\b.*>",
-
       "(?i)\\bls\\s+~/\\.\\*/",
       "(?i)\\bls\\s+-[a-zA-Z]*l[a-zA-Z]*\\s+~/\\.\\*",
       "(?i)\\bfind\\s+~/?\\.\\S*\\s+.*-exec",
       "(?i)\\bfind\\s+~\\s+.*-name\\s+['\"]?\\.",
-
       "(?i)\\bnc\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
       "(?i)\\bncat\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
       "(?i)\\bsocat\\b.*TCP:\\d+\\.\\d+",
       "(?i)\\btelnet\\s+\\d+\\.\\d+\\.\\d+\\.\\d+"
     ]
   },
-
   "crypto_mining": {
     "description": "Patterns associated with cryptocurrency mining abuse.",
     "patterns": [
@@ -204,7 +214,6 @@
       "hashvault.pro"
     ]
   },
-
   "data_exfiltration": {
     "description": "Patterns suggesting data archiving and exfiltration.",
     "patterns": [
@@ -215,7 +224,6 @@
       "(?i)base64\\s+.*\\|\\s*curl"
     ]
   },
-
   "prompt_injection_phrases": {
     "description": "Phrases commonly used in prompt injection attacks embedded inside SKILL.md files.",
     "patterns": [
@@ -232,9 +240,8 @@
       "(?i)jailbreak"
     ]
   },
-
   "allowlist": {
-    "description": "Paths and domains explicitly allowed — reduces false positives.",
+    "description": "Paths and domains explicitly allowed \u2014 reduces false positives.",
     "paths": [
       "/tmp/",
       "/var/tmp/"
@@ -255,5 +262,6 @@
       "hub.docker.com",
       "gitlab.com"
     ]
-  }
+  },
+  "checksum_sha256": "dd16754ec00d2df45dff42280c1eaafb5014a17259a042af5b56bb5ef4ee591b"
 }

@@ -8,6 +8,7 @@ env/
 
 # Security data (local only)
 .security/
+logs/
 
 # Environment / secrets
 .env

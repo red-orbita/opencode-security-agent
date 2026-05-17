@@ -19,6 +19,12 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: HIGH
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information"
+        - "CWE-829: Inclusion of Functionality from Untrusted Control Sphere"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+        - "A05:2021 - Security Misconfiguration"
       references:
         - https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html
 
@@ -40,6 +46,11 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: HIGH
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information"
+        - "CWE-829: Inclusion of Functionality from Untrusted Control Sphere"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   - id: fetch-to-raw-ip-js
     patterns:
@@ -58,6 +69,10 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: MEDIUM
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   - id: fetch-to-raw-ip-python
     patterns:
@@ -75,6 +90,10 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: MEDIUM
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   # ─── Hidden BCC / email exfiltration (Postmark pattern) ────────────────
 
@@ -97,6 +116,11 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: HIGH
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information"
+        - "CWE-359: Exposure of Private Personal Information"
+      owasp:
+        - "A01:2021 - Broken Access Control"
       references:
         - https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html
 
@@ -110,3 +134,9 @@ rules:
     metadata:
       category: network-exfiltration
       confidence: HIGH
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html

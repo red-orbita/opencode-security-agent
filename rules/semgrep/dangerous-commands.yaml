@@ -11,6 +11,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   - id: wget-pipe-bash
     pattern-regex: wget\s+.*-O\s*-\s*\|\s*(ba)?sh
@@ -21,6 +25,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   - id: reverse-shell-bash
     pattern-regex: bash\s+-i\s+>&\s*/dev/tcp/
@@ -32,6 +40,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: netcat-shell
     pattern-regex: nc\s+.*-e\s+/bin/(ba)?sh
@@ -42,6 +54,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: python-reverse-shell
     pattern-regex: python3?\s+-c\s+.*socket.*connect.*
@@ -52,6 +68,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: base64-decode-exec
     pattern-regex: base64\s+(-d|--decode)\s*\|\s*(ba)?sh
@@ -63,6 +83,11 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code"
+        - "CWE-116: Improper Encoding or Escaping of Output"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: bashrc-append
     pattern-regex: '>>\s*~/?\.(bashrc|zshrc|profile|bash_profile)'
@@ -74,6 +99,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   - id: chmod-777
     pattern-regex: chmod\s+777\s+
@@ -85,6 +114,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: MEDIUM
+      cwe:
+        - "CWE-732: Incorrect Permission Assignment for Critical Resource"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   - id: fork-bomb
     pattern-regex: ":\\(\\)\\s*\\{.*\\|.*\\}"
@@ -96,6 +129,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: HIGH
+      cwe:
+        - "CWE-400: Uncontrolled Resource Consumption"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
 
   # ─── Code execution / eval ─────────────────────────────────────────────
 
@@ -113,6 +150,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: MEDIUM
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: eval-usage-js
     patterns:
@@ -128,6 +169,10 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: MEDIUM
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      owasp:
+        - "A03:2021 - Injection"
 
   - id: subprocess-shell-true
     pattern: subprocess.run($CMD, ..., shell=True, ...)
@@ -139,3 +184,7 @@ rules:
     metadata:
       category: dangerous-commands
       confidence: MEDIUM
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"

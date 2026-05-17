@@ -19,17 +19,8 @@ import re
 import sys
 from pathlib import Path
 
-IOCS_PATH = Path(__file__).parent.parent / "references" / "iocs.json"
-
-
-def load_iocs():
-    if IOCS_PATH.exists():
-        return json.loads(IOCS_PATH.read_text())
-    return {}
-
-
-def save_iocs(iocs):
-    IOCS_PATH.write_text(json.dumps(iocs, indent=2) + "\n")
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+from ioc_utils import load_iocs, save_iocs
 
 
 def merge_patterns(iocs, new_patterns):

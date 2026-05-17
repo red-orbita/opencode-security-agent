@@ -48,13 +48,25 @@ _load_secrets() {
         local sops_file
         if sops_file=$(_find_file "$SCRIPT_DIR" "secrets.enc.yaml"); then
             echo "Loading secrets from SOPS: $sops_file"
-            eval "$(sops -d "$sops_file" | python3 -c "
+            # Write decrypted key=value pairs to a temp file, then source it.
+            # Avoids eval with untrusted input -- only exports KEY=VALUE lines.
+            local secrets_tmp
+            secrets_tmp=$(mktemp)
+            trap 'rm -f "$secrets_tmp" "$TMPFILE"' EXIT
+            sops -d "$sops_file" | python3 -c "
 import sys, shlex, yaml
 data = yaml.safe_load(sys.stdin)
 if data:
     for k, v in data.items():
-        print(f'export {k}={shlex.quote(str(v))}')
-")"
+        # Only export if key is a valid shell variable name
+        if k.isidentifier():
+            print(f'export {k}={shlex.quote(str(v))}')
+" > "$secrets_tmp"
+            set -a
+            # shellcheck disable=SC1090
+            source "$secrets_tmp"
+            set +a
+            rm -f "$secrets_tmp"
             return 0
         fi
     fi

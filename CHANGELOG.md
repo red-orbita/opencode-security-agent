@@ -3,6 +3,57 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.0] -- 2026-05-17
+
+### Security
+
+- **Fixed `is_allowlisted_domain` substring bypass (CVE-class).** Previous implementation
+  used `any(d.lower() in url_lc ...)` which allowed bypass via domain embedding (e.g.
+  `api.anthropic.com.attacker.com` matched allowlisted `api.anthropic.com`). Now uses
+  proper domain extraction + exact/subdomain matching.
+- **Eliminated `eval` shell injection in `update_iocs.sh`.** SOPS decryption output was
+  passed through `eval`, creating a code injection vector. Replaced with safe `source`
+  of a temporary file containing validated `export KEY=VALUE` lines.
+- **Added SHA-256 integrity verification for `iocs.json`.** New `checksum_sha256` field
+  in iocs.json is verified at load time. Tampering triggers a stderr warning (fail-open).
+  New `scripts/sign_iocs.py` utility to generate/verify checksums.
+
+### Added
+
+- **Claude Code hooks adapter** (`hooks/claude_code_hook.py`). Thin adapter translating
+  Claude Code's `PreToolUse` hook protocol to sentinel_preflight's `decide()` function.
+  Drop-in integration via `.claude/hooks.json`.
+- **Shared IOC utilities module** (`lib/ioc_utils.py`). Extracted `load_iocs()`,
+  `save_iocs()`, `merge_domains()`, and `extract_domain()` from 5 duplicated import
+  scripts into a single shared module.
+- **Pytest test suite** (`tests/test_hook_pytest.py`). All 55 tests migrated to pytest
+  with proper classes, assertions, and `-v` support. Legacy `test_hook.py` retained.
+- **Pastebin detection hardened.** Pastebin-style service matching now uses proper domain
+  extraction instead of substring matching, preventing false positives.
+- `crypto_mining` and `data_exfiltration` checks now consume patterns from `iocs.json`
+  sections, with hardcoded fallbacks. IOC database is the single source of truth.
+- **CWE and OWASP metadata in all Semgrep rules.** All 24 rules now include `cwe` and
+  `owasp` fields in metadata. GitHub Security tab groups findings by CWE automatically.
+  Mappings: CWE-78 (OS command injection), CWE-94 (code injection), CWE-200 (information
+  exposure), CWE-506 (embedded malicious code), CWE-522 (insufficiently protected
+  credentials), CWE-526 (env var exposure), and 8 more.
+- **Formal threat model** (`THREAT_MODEL.md`). Documents 9 attack vectors with CWE/CAPEC
+  references, mitigations, residual risk levels, trust boundaries, design trade-offs,
+  and improvement roadmap. Identifies output inspection (PostToolUse) as P0 gap.
+- **Structured JSON logging for block/warn decisions.** All block and warn decisions are
+  persisted to `logs/sentinel.jsonl` in JSON Lines format (one JSON object per line).
+  Fields: timestamp (ISO 8601 UTC), agent, version, decision, severity, tool_name,
+  reason, elapsed_ms, tool_input_summary. Ready for SIEM ingestion.
+  Configurable via `SENTINEL_LOG_DIR` env var. Disable with `SENTINEL_LOG_DISABLE=1`.
+
+### Changed
+
+- Import scripts (`import_urlhaus.py`, `import_threatfox.py`, `import_otx.py`,
+  `import_abuseipdb.py`, `import_misp.py`) refactored to use `lib/ioc_utils.py`.
+- `SECURITY.md` updated: v1.5.x now supported, v<1.3 dropped.
+- Moved `registry-metadata.yaml` from `rules/semgrep/` to `rules/` to fix Semgrep
+  `--validate` failing on the entire rules directory (pre-existing bug since v1.4.0).
+
 ## [1.4.0] -- 2026-04-22
 
 ### Added

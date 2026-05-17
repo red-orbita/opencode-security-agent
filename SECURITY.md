@@ -29,11 +29,18 @@ The following are in scope:
 
 | Version | Supported |
 |---|---|
+| 1.5.x | Yes |
+| 1.4.x | Yes |
 | 1.3.x | Yes |
-| 1.2.x | Yes |
-| < 1.2 | No |
+| < 1.3 | No |
 
 ## Additional scope for v1.3+
 
 - Bypasses of the **self-protection layer** (agent writing to its own allowlist or IOC database)
 - Evasions of the **human-in-the-loop** requirement for allowlist modifications
+
+## Additional scope for v1.5+
+
+- Bypasses of **proper domain matching** (e.g. substring attacks against `is_allowlisted_domain`)
+- Tampering with **iocs.json integrity** (checksum verification bypass)
+- Shell injection via **SOPS secret loading** in `update_iocs.sh`

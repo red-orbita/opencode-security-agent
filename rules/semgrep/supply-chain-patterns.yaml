@@ -11,6 +11,10 @@ rules:
     metadata:
       category: crypto-mining
       confidence: HIGH
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   - id: xmrig-binary
     pattern-regex: xmrig
@@ -21,6 +25,10 @@ rules:
     metadata:
       category: crypto-mining
       confidence: HIGH
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   - id: mining-pool-domains
     pattern-regex: (pool\.minexmr\.com|pool\.supportxmr\.com|mine\.zergpool\.com|hashvault\.pro|nanopool\.org|2miners\.com|f2pool\.com|unmineable\.com)
@@ -31,6 +39,10 @@ rules:
     metadata:
       category: crypto-mining
       confidence: HIGH
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
 
   # ─── Prompt injection ──────────────────────────────────────────────────
 
@@ -44,8 +56,13 @@ rules:
     metadata:
       category: prompt-injection
       confidence: HIGH
+      cwe:
+        - "CWE-77: Improper Neutralization of Special Elements used in a Command"
+      owasp:
+        - "A03:2021 - Injection"
       references:
         - https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/
+        - https://owasp.org/www-project-top-10-for-large-language-model-applications/
 
   # ─── Obfuscation ──────────────────────────────────────────────────────
 
@@ -63,6 +80,11 @@ rules:
     metadata:
       category: obfuscation
       confidence: HIGH
+      cwe:
+        - "CWE-116: Improper Encoding or Escaping of Output"
+        - "CWE-200: Exposure of Sensitive Information"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   - id: base64-encode-and-send-js
     patterns:
@@ -78,6 +100,11 @@ rules:
     metadata:
       category: obfuscation
       confidence: HIGH
+      cwe:
+        - "CWE-116: Improper Encoding or Escaping of Output"
+        - "CWE-200: Exposure of Sensitive Information"
+      owasp:
+        - "A01:2021 - Broken Access Control"
 
   - id: hex-encoded-strings
     patterns:
@@ -95,3 +122,7 @@ rules:
     metadata:
       category: obfuscation
       confidence: MEDIUM
+      cwe:
+        - "CWE-116: Improper Encoding or Escaping of Output"
+      owasp:
+        - "A03:2021 - Injection"

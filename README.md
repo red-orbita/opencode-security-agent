@@ -4,7 +4,7 @@ Security agent for OpenCode. **v2 blocks malicious tool calls in real time** -- 
 
 **License:** [GPL-3.0](./LICENSE)
 
-**Latest version:** 1.4.0 -- April 2026 ([changelog](./CHANGELOG.md))
+**Latest version:** 1.5.0 -- May 2026 ([changelog](./CHANGELOG.md))
 
 ---
 
@@ -234,6 +234,29 @@ The security agent skill triggers automatically when it detects you're about to 
 **v1 static scanner** -- A skill (`skills/security-agent/SKILL.md`) with structured instructions that tells OpenCode how to act as a security agent. Uses OpenCode's built-in tools (bash, read, write, glob, grep, webfetch) to scan files, search databases, and generate reports.
 
 All analysis happens locally + public web searches (for v1 scanning). Your code and credentials never leave your machine.
+
+---
+
+## Claude Code integration
+
+The sentinel engine can also run as a [Claude Code hook](https://docs.anthropic.com/en/docs/claude-code/hooks). Use `hooks/claude_code_hook.py` as a `PreToolUse` hook:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "command": "python3 /path/to/opencode-security-agent/hooks/claude_code_hook.py",
+        "timeout": 5000
+      }
+    ]
+  }
+}
+```
+
+The adapter translates Claude Code's hook protocol to `sentinel_preflight.decide()`. All the same checks apply: sensitive paths, known-malicious domains, dangerous commands, prompt injection, etc.
+
+> **Note:** Codex (OpenAI) does not currently expose a public hook system. For Codex environments, use the Semgrep static rules (`rules/semgrep/`) in CI/CD instead.
 
 ---
 
@@ -585,6 +608,7 @@ opencode-security-agent/
 ├── CHANGELOG.md                                 # version history
 ├── CONTRIBUTING.md                              # contribution guidelines
 ├── SECURITY.md                                  # vulnerability disclosure policy
+├── THREAT_MODEL.md                              # formal threat model (9 vectors, CWE/CAPEC)
 ├── LICENSE                                      # GPL-3.0
 ├── action.yml                                   # GitHub Action (reusable)
 ├── .sops.yaml                                   # SOPS encryption config (age backend)
@@ -592,13 +616,17 @@ opencode-security-agent/
 ├── plugins/                                     # v2 runtime protection
 │   ├── security-agent.ts                        # OpenCode plugin (tool.execute.before)
 │   └── sentinel_preflight.py                    # Python pattern matcher (called by plugin)
+├── hooks/                                       # adapters for other AI agents
+│   └── claude_code_hook.py                      # Claude Code PreToolUse hook adapter
+├── lib/                                         # shared Python modules
+│   └── ioc_utils.py                             # load/save/merge IOCs (used by import scripts)
 ├── rules/                                       # Semgrep static analysis rules
+│   ├── registry-metadata.yaml                   # Semgrep Registry publishing metadata
 │   └── semgrep/
 │       ├── credential-exfiltration.yaml         # custom: credential file reads, env harvesting
 │       ├── network-exfiltration.yaml            # custom: exfil services, raw IPs, hidden BCC
 │       ├── dangerous-commands.yaml              # custom: curl|bash, reverse shells, eval
 │       ├── supply-chain-patterns.yaml           # custom: crypto mining, prompt injection
-│       ├── registry-metadata.yaml               # Semgrep Registry publishing metadata
 │       └── community/                           # bundled from semgrep/semgrep-rules
 │           ├── LICENSE                          # Semgrep Rules License
 │           ├── ai-mcp/                          # MCP injection, poisoning, SSRF, LLM-to-exec
@@ -613,6 +641,7 @@ opencode-security-agent/
 │   ├── uninstall.sh
 │   ├── scan_semgrep.sh                          # Semgrep static scanner wrapper
 │   ├── update_iocs.sh                           # orchestrator: fetches all IOC sources
+│   ├── sign_iocs.py                             # SHA-256 checksum for iocs.json integrity
 │   ├── import_urlhaus.py                        # URLhaus importer
 │   ├── import_threatfox.py                      # ThreatFox importer
 │   ├── import_otx.py                            # AlienVault OTX importer
@@ -628,6 +657,7 @@ opencode-security-agent/
 │   └── threat-db-template.json                  # local threat DB schema
 └── tests/
     ├── test_hook.py                             # regression tests for the Python hook (55)
+    ├── test_hook_pytest.py                      # pytest version of hook tests (55)
     ├── test_semgrep_rules.py                    # regression tests for Semgrep rules (32)
     └── semgrep-samples/                         # test corpus for Semgrep rules
         ├── malicious/                           # 6 samples reproducing real attack patterns

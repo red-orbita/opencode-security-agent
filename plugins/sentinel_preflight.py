@@ -18,14 +18,91 @@ Decision values:
   "block"  -- tool call blocked. "reason" is shown to the user.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
+import hashlib
 import json
 import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Structured logging for block/warn decisions (JSON Lines)
+# ---------------------------------------------------------------------------
+_LOG_DIR_CANDIDATES = [
+    Path.home() / ".security" / "logs",
+    Path(__file__).parent.parent / "logs",
+]
+
+_LOG_ENV_VAR = "SENTINEL_LOG_DIR"
+
+
+def _get_log_path():
+    """Determine the log file path. Returns None if logging is disabled."""
+    if os.environ.get("SENTINEL_LOG_DISABLE", "").lower() in ("1", "true", "yes"):
+        return None
+
+    # Env var override
+    env_dir = os.environ.get(_LOG_ENV_VAR)
+    if env_dir:
+        log_dir = Path(env_dir)
+    else:
+        # Use first candidate that exists or can be created
+        log_dir = None
+        for candidate in _LOG_DIR_CANDIDATES:
+            if candidate.exists() or candidate.parent.exists():
+                log_dir = candidate
+                break
+        if log_dir is None:
+            return None
+
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir / "sentinel.jsonl"
+    except OSError:
+        return None
+
+
+def _log_decision(tool_name, decision, reason, severity, elapsed_ms, tool_input=None):
+    """Append a structured JSON log entry for block/warn decisions.
+
+    Only logs block and warn decisions (allows are not logged to avoid noise).
+    Log format: JSON Lines (one JSON object per line), ready for SIEM ingestion.
+    """
+    if decision == "allow":
+        return
+
+    log_path = _get_log_path()
+    if log_path is None:
+        return
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "agent": "sentinel_preflight",
+        "version": __version__,
+        "decision": decision,
+        "severity": severity or "unknown",
+        "tool_name": tool_name,
+        "reason": reason or "",
+        "elapsed_ms": elapsed_ms,
+    }
+
+    # Include sanitized tool_input summary (truncate large values)
+    if tool_input:
+        summary = {}
+        for k, v in (tool_input if isinstance(tool_input, dict) else {}).items():
+            sv = str(v)
+            summary[k] = sv[:500] + "..." if len(sv) > 500 else sv
+        entry["tool_input_summary"] = summary
+
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # Fail silently -- logging should never break the agent
 
 # ---------------------------------------------------------------------------
 # Module-level cache for IOCs and allowlist (mtime-based)
@@ -59,9 +136,24 @@ def _load_cached(cache_key, candidates, default):
         return entry["data"]
 
     try:
-        data = json.loads(path.read_text())
+        raw = path.read_text()
+        data = json.loads(raw)
     except Exception:
         data = default
+
+    # Integrity check: if iocs.json has a checksum field, verify it
+    if cache_key == "iocs" and isinstance(data, dict) and "checksum_sha256" in data:
+        expected = data.pop("checksum_sha256")
+        # Recompute checksum without the checksum field itself
+        content_for_hash = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        actual = hashlib.sha256(content_for_hash.encode()).hexdigest()
+        if actual != expected:
+            print(
+                f"[WARN] iocs.json integrity check failed "
+                f"(expected={expected[:16]}... got={actual[:16]}...)",
+                file=sys.stderr,
+            )
+            # Still load the data but log the warning -- fail-open
 
     entry["data"] = data
     entry["path"] = path
@@ -133,9 +225,47 @@ def is_allowlisted_path(path, allowlist_paths):
     return any(path_matches(path, p) for p in allowlist_paths)
 
 
+def _extract_domain(url_or_domain):
+    """Extract the hostname from a URL or return the input as-is if it's already a domain."""
+    text = url_or_domain.strip().lower()
+    # If it looks like a URL, parse it
+    if "://" in text:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(text)
+            return parsed.hostname or ""
+        except Exception:
+            return text
+    # Strip leading user@
+    if "@" in text:
+        text = text.rsplit("@", 1)[-1]
+    # Strip trailing path/port
+    text = text.split("/")[0].split(":")[0]
+    return text
+
+
 def is_allowlisted_domain(url_or_domain, allowlist_domains):
-    url_lc = url_or_domain.lower()
-    return any(d.lower() in url_lc for d in allowlist_domains)
+    """Check if the domain in url_or_domain matches an allowlisted domain.
+
+    Uses proper domain matching: the extracted hostname must either equal the
+    allowlisted domain exactly, or be a subdomain of it (e.g. 'sub.github.com'
+    matches 'github.com'). This prevents bypass via substring embedding
+    (e.g. 'api.anthropic.com.attacker.com' no longer matches 'api.anthropic.com').
+    """
+    hostname = _extract_domain(url_or_domain)
+    if not hostname:
+        return False
+    for d in allowlist_domains:
+        d_lc = d.lower().strip()
+        if not d_lc:
+            continue
+        # Exact match
+        if hostname == d_lc:
+            return True
+        # Subdomain match: hostname ends with '.allowlisted_domain'
+        if hostname.endswith("." + d_lc):
+            return True
+    return False
 
 
 def _generate_typosquat_variants(domain):
@@ -308,7 +438,8 @@ def check_suspicious_network(tool_input, iocs, allowlist):
     for text in haystack:
         # Known malicious -- critical, no allowlist override
         for entry in known_malicious:
-            if entry.get("domain", "").lower() in text.lower():
+            domain = entry.get("domain", "").lower()
+            if domain and domain in text.lower():
                 return (f"known-malicious domain: {entry['domain']} ({entry.get('incident', 'confirmed incident')})", "critical")
 
         # Typosquatting detection -- high severity
@@ -320,9 +451,11 @@ def check_suspicious_network(tool_input, iocs, allowlist):
         if is_allowlisted_domain(text, allowed_domains):
             continue
 
-        # Pastebin-style services
+        # Pastebin-style services (use domain extraction for proper matching)
+        text_domain = _extract_domain(text)
         for ps in pastebin:
-            if ps.lower() in text.lower():
+            ps_lc = ps.lower()
+            if text_domain == ps_lc or text_domain.endswith("." + ps_lc):
                 return (f"pastebin-style service: {ps}", "high")
 
         # Raw IPs in URLs
@@ -361,6 +494,10 @@ def check_data_exfiltration(tool_input, iocs, allowlist):
     """Detect patterns suggesting data archiving + exfiltration."""
     haystack = _collect_strings(tool_input)
 
+    # Load patterns from iocs.json, with hardcoded fallbacks
+    exfil_section = iocs.get("data_exfiltration", {})
+    exfil_patterns = exfil_section.get("patterns", [])
+
     sensitive_data_patterns = [
         r"/etc/passwd", r"/etc/shadow", r"\.ssh/", r"\.aws/",
         r"\.env\b", r"credentials", r"\.kube/config", r"\.gnupg/",
@@ -369,6 +506,14 @@ def check_data_exfiltration(tool_input, iocs, allowlist):
 
     for text in haystack:
         tl = text.lower()
+
+        # Check patterns from iocs.json first (e.g. tar+curl combos)
+        for rx in exfil_patterns:
+            try:
+                if re.search(rx, text, re.IGNORECASE):
+                    return (f"data exfiltration pattern: /{rx}/", "critical")
+            except re.error:
+                continue
 
         # curl POST with file upload targeting sensitive data
         if re.search(r"curl\b.*-[A-Za-z]*X\s*POST", text) or re.search(r"curl\b.*--data|curl\b.*-d\s", text):
@@ -392,7 +537,13 @@ def check_crypto_mining(tool_input, iocs, allowlist):
     """Detect crypto mining related commands and patterns."""
     haystack = _collect_strings(tool_input)
 
-    mining_patterns = [
+    # Load patterns from iocs.json
+    mining_section = iocs.get("crypto_mining", {})
+    ioc_patterns = mining_section.get("patterns", [])
+    known_pools = mining_section.get("known_pools", [])
+
+    # Hardcoded fallbacks for patterns not in iocs.json
+    fallback_patterns = [
         r"\bxmrig\b",
         r"stratum\+tcp://",
         r"stratum\+ssl://",
@@ -403,20 +554,31 @@ def check_crypto_mining(tool_input, iocs, allowlist):
         r"\bcgminer\b",
         r"\bmonero\b",
         r"\bxmr\b",
-        r"pool\.minexmr\.com",
-        r"pool\.hashvault\.pro",
-        r"monerohash\.com",
-        r"nanopool\.org",
-        r"minergate\.com",
         r"coinhive",
         r"cryptonight",
     ]
 
+    # Merge ioc_patterns with fallbacks (avoid duplicates)
+    all_patterns = list(ioc_patterns)
+    ioc_patterns_lower = {p.lower() for p in ioc_patterns}
+    for p in fallback_patterns:
+        if p.lower() not in ioc_patterns_lower:
+            all_patterns.append(p)
+
+    # Add known pool domains as regex patterns
+    for pool in known_pools:
+        pool_rx = re.escape(pool)
+        if pool_rx.lower() not in ioc_patterns_lower:
+            all_patterns.append(pool_rx)
+
     for text in haystack:
         tl = text.lower()
-        for rx in mining_patterns:
-            if re.search(rx, tl):
-                return (f"crypto mining detected: /{rx}/", "critical")
+        for rx in all_patterns:
+            try:
+                if re.search(rx, tl):
+                    return (f"crypto mining detected: /{rx}/", "critical")
+            except re.error:
+                continue
 
     return (None, None)
 
@@ -645,9 +807,25 @@ def main():
         return
 
     tool_name = payload.get("tool_name") or payload.get("tool", "<unknown>")
+    tool_input = payload.get("tool_input") or payload.get("input") or {}
+
+    if decision == "allow":
+        print(json.dumps({"decision": "allow", "elapsed_ms": elapsed}))
+        return
+
+    # Extract severity from reason string (e.g. "[CRITICAL] ..." -> "critical")
+    severity = "unknown"
+    if reason:
+        import re as _re
+        m = _re.match(r"\[(\w+)\]", reason)
+        if m:
+            severity = m.group(1).lower()
+
+    # Log structured decision for SIEM / post-incident analysis
+    _log_decision(tool_name, decision, reason, severity, elapsed, tool_input)
+
     if decision == "block":
         # Build a human-friendly hint showing what to allowlist
-        tool_input = payload.get("tool_input") or payload.get("input") or {}
         hint = _build_allowlist_hint(tool_input, reason)
         message = (
             f"OpenCode Security Agent blocked a {tool_name} call.\n"
