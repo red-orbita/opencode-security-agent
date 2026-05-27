@@ -4,7 +4,7 @@ Security agent for OpenCode. **v2 blocks malicious tool calls in real time** -- 
 
 **License:** [GPL-3.0](./LICENSE)
 
-**Latest version:** 1.5.0 -- May 2026 ([changelog](./CHANGELOG.md))
+**Latest version:** 1.6.0 -- May 2026 ([changelog](./CHANGELOG.md))
 
 ---
 
@@ -32,14 +32,52 @@ Static analysis of v1.0.15 would have found nothing -- it was clean. That's the 
 
 An **OpenCode plugin** using the `tool.execute.before` event runs before every tool call. It inspects the call against a local IOC library plus your allowlist, then allows or blocks it:
 
-- **Sensitive paths** -- reads of `~/.ssh/`, `~/.aws/`, credentials files, `/etc/shadow` are blocked. Paths embedded in bash commands (e.g. `cat ~/.aws/credentials`) are also detected.
+- **Sensitive paths** -- reads of `~/.ssh/`, `~/.aws/`, credentials files, `/etc/shadow` are blocked. Paths embedded in bash commands (e.g. `cat ~/.aws/credentials`) or inside strings (e.g. Python `open('.ssh/id_rsa')`) are also detected.
 - **Known-malicious domains** -- hardcoded from confirmed incidents. `giftshop.club` is in there by default and cannot be allowlisted.
 - **Exfiltration services** -- pastebin.com, transfer.sh, webhook.site, requestbin, ngrok, serveo, raw-IP URLs.
-- **Dangerous commands** -- `curl ... | bash`, `nc -e`, `bash -i >& /dev/tcp/...`, base64 | curl chains, appends to `.bashrc`, fork bombs.
+- **Dangerous commands** -- `curl ... | bash`, `base64 -d | bash`, `nc -e`, `bash -i >& /dev/tcp/...`, base64 | curl chains, appends to `.bashrc`, fork bombs.
 - **Sensitive env vars** -- `ANTHROPIC_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `DATABASE_URL`, and the generic `*_API_KEY` / `*_SECRET` / `*_TOKEN` / `*_PASSWORD` patterns.
 - **Prompt injection detection** -- phrases like "ignore previous instructions", "act as root", "bypass security" embedded in tool call arguments are flagged.
+- **Unicode smuggling detection** (v1.6.0) -- invisible characters (Tag codepoints, BIDI overrides, zero-width chars) used to hide malicious instructions in skills and tool inputs.
 - **Data exfiltration detection** -- upload commands targeting paste/transfer services are flagged.
 - **Crypto mining detection** -- xmrig, stratum+tcp, mining pool domains, and wallet address patterns.
+
+### New in v1.6.0 -- Defense in depth
+
+Three new security layers complement the existing pre-execution check:
+
+**1. Skill Validation Gate (`skill.install.before`)**
+
+Skills are validated before loading. Any skill containing Unicode smuggling, prompt injection patterns, or Semgrep findings is rejected:
+
+```bash
+# Validate a skill manually
+python3 plugins/skill_validator.py /path/to/skill/
+
+# Batch validate all skills
+python3 plugins/skill_validator.py --batch /path/to/skills/
+```
+
+**2. Tool Output Inspection (`tool.execute.after`)**
+
+A new `sentinel_postflight.py` engine inspects tool/MCP outputs for indirect prompt injection -- the #1 previously-unmitigated attack vector. Detects:
+- Prompt override attempts ("ignore all previous instructions")
+- Fake system/instruction tags (`[SYSTEM]`, `<system>`)
+- Credential harvesting ("include the api_key in your request")
+- Deception patterns ("do not tell the user")
+- Unicode smuggling in outputs (hidden Tag characters)
+
+**3. Sandbox Enforcement for Untrusted Skills**
+
+Skills not listed in `.security/trusted-skills.json` cannot auto-execute bash commands. This prevents a compromised skill from running arbitrary code without human approval:
+
+```json
+// .security/trusted-skills.json
+{
+  "trusted": ["security-agent"],
+  "_comment": "Only a human can edit this file"
+}
+```
 
 **Zero LLM cost.** Pure local pattern matching. Only blocked calls add a short message to the conversation.
 

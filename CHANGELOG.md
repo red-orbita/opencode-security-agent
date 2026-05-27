@@ -3,6 +3,63 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.6.0] -- 2026-05-27
+
+### Security
+
+- **Unicode smuggling detection (`check_unicode_smuggling()`).** Detects invisible
+  characters used to hide malicious instructions in skill files and tool inputs:
+  - Tag codepoints (U+E0000-U+E007F) -- CRITICAL, blocked
+  - Bidirectional overrides (U+202A-U+202E, U+2066-U+2069) -- HIGH, blocked
+  - Zero-width chars (U+200B-U+200F), variation selectors, BOM, interlinear annotations -- MEDIUM, warned
+  Addresses the "Unicode Smuggling in Skills" attack (Embrace The Red, Feb 2026).
+- **Indirect prompt injection detection in tool outputs (`sentinel_postflight.py`).**
+  New `tool.execute.after` hook inspects tool/MCP responses for injected instructions,
+  fake system tags, credential harvesting patterns, and Unicode smuggling. Decisions:
+  `blocked` (output discarded), `tainted` (warning), `clean`.
+- **Skill validation gate (`skill_validator.py`).** Mandatory pre-install scan of skill
+  files for Unicode smuggling, prompt injection patterns, and Semgrep findings. Integrated
+  via `skill.install.before` event. Skills with critical/high findings are rejected.
+- **Sandbox enforcement for untrusted skills.** Skills not listed in
+  `.security/trusted-skills.json` cannot auto-execute bash commands. Self-protection
+  prevents the agent from modifying this file.
+- **Fixed pastebin-style domain detection.** URLs embedded in commands (e.g.
+  `wget https://pastebin.com/...`) are now properly extracted and matched against
+  the pastebin service list.
+- **Added `base64 -d | bash` detection.** New dangerous command patterns catch
+  base64-decode piped to shell execution.
+- **Added embedded path detection.** Regex patterns for `.ssh/` and `.aws/` paths
+  now match even when embedded inside strings (e.g. Python `open()` calls).
+- **Self-protection extended to `trusted-skills.json`.** Bash redirects and writes
+  to the trusted skills config are blocked.
+
+### Added
+
+- `plugins/sentinel_postflight.py` -- Post-execution output inspection engine.
+  Detects indirect prompt injection, Unicode smuggling in outputs, credential
+  harvesting attempts, deception patterns ("do not tell the user"), and fake
+  system/instruction tags. JSON Lines logging to `logs/postflight.jsonl`.
+- `plugins/skill_validator.py` -- Skill validation gate. CLI tool and library for
+  pre-install scanning. Supports single files, directories, and `--batch` mode.
+  Runs Unicode scan + injection pattern scan + Semgrep (if available).
+- `.security/trusted-skills.json` -- Trusted skills configuration for sandbox
+  enforcement. Only `security-agent` is trusted by default.
+- `tests/test_advanced_security.py` -- 16 tests covering postflight and validator.
+- `tests/security_audit.py` -- 33-test security audit simulating the Unicode
+  Smuggling article attack scenario end-to-end.
+- `tests/security_audit_extended.py` -- 49-test extended audit covering evasion
+  techniques, multi-turn attacks, supply chain, exfiltration channels, privilege
+  escalation, and TOCTOU attacks.
+- `TestUnicodeSmuggling` class in `test_hook_pytest.py` (6 new tests).
+
+### Changed
+
+- `security-agent.ts` bumped to v1.3.0. Now registers `tool.execute.after` and
+  `skill.install.before` event handlers in addition to `tool.execute.before`.
+- `sentinel_preflight.py` bumped to v1.5.0 internally. Added `check_unicode_smuggling()`
+  to the checks pipeline.
+- Trust boundaries diagram in THREAT_MODEL.md updated to reflect postflight inspection.
+
 ## [1.5.0] -- 2026-05-17
 
 ### Security
