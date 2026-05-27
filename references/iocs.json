@@ -53,7 +53,11 @@
       "(?i)\\.pem$",
       "(?i)\\.p12$",
       "(?i)\\.pfx$",
-      "(?i)\\.key$"
+      "(?i)\\.key$",
+      "(?i)\\.ssh/(id_rsa|id_ed25519|id_ecdsa|authorized_keys|config)",
+      "(?i)\\.aws/(credentials|config)",
+      "(?i)/etc/shadow",
+      "(?i)/etc/passwd"
     ]
   },
   "sensitive_env_vars": {
@@ -190,7 +194,10 @@
       "(?i)\\bnc\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
       "(?i)\\bncat\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
       "(?i)\\bsocat\\b.*TCP:\\d+\\.\\d+",
-      "(?i)\\btelnet\\s+\\d+\\.\\d+\\.\\d+\\.\\d+"
+      "(?i)\\btelnet\\s+\\d+\\.\\d+\\.\\d+\\.\\d+",
+      "(?i)base64\\s+(-d|--decode)\\s*\\|\\s*(bash|sh|zsh|python|perl|ruby)",
+      "(?i)\\|\\s*base64\\s+(-d|--decode)\\s*\\|\\s*(bash|sh|zsh|python)",
+      "(?i)echo\\s+[A-Za-z0-9+/=]+\\s*\\|\\s*base64\\s+(-d|--decode)\\s*\\|"
     ]
   },
   "crypto_mining": {

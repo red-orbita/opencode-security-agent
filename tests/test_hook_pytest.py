@@ -433,3 +433,63 @@ class TestSelfProtection:
             {"tool_name": "bash", "tool_input": {"command": "cat /etc/shadow"}},
             "deny", expected_substr="human to manually add",
         )
+
+
+class TestUnicodeSmuggling:
+    """Tests for Unicode smuggling / invisible character detection."""
+
+    def test_tag_characters_in_content_blocked(self):
+        """Tag codepoints (U+E0001 etc.) used for invisible instructions in skills."""
+        # Simulate a skill file with hidden tag characters
+        hidden = "".join(chr(c) for c in range(0xE0001, 0xE0020))
+        payload = {
+            "tool_name": "write",
+            "tool_input": {"filePath": "skills/evil.md", "content": f"# Safe skill\n{hidden}"}
+        }
+        assert_decision(payload, "deny", expected_substr="Unicode Tag characters")
+
+    def test_bidi_override_in_command_blocked(self):
+        """Bidirectional override characters that can hide malicious text direction."""
+        # RLO (U+202E) can make 'txt.exe' display as 'exe.txt'
+        bidi_payload = {
+            "tool_name": "bash",
+            "tool_input": {"command": f"cat file\u202Etxt.exe"}
+        }
+        assert_decision(bidi_payload, "deny", expected_substr="Bidirectional override")
+
+    def test_zero_width_characters_warned(self):
+        """Zero-width spaces and joiners trigger a warning (allowed with reason)."""
+        # ZWSP (U+200B) can split tokens invisibly
+        payload = {
+            "tool_name": "write",
+            "tool_input": {"filePath": "readme.md", "content": f"Hello\u200B\u200Bworld"}
+        }
+        # Warn decisions are output as "allow" with a reason string
+        assert_decision(payload, "allow", expected_substr="Invisible Unicode")
+
+    def test_clean_content_allowed(self):
+        """Normal ASCII/UTF-8 content passes without issue."""
+        payload = {
+            "tool_name": "write",
+            "tool_input": {"filePath": "skills/good.md", "content": "# My skill\nDoes useful things."}
+        }
+        assert_decision(payload, "allow")
+
+    def test_tag_in_description_field_blocked(self):
+        """Tag characters in description field also caught."""
+        hidden = chr(0xE0041) + chr(0xE0042) + chr(0xE0043)  # invisible "ABC"
+        payload = {
+            "tool_name": "write",
+            "tool_input": {"description": f"A helpful tool {hidden}", "filePath": "x.md", "content": "ok"}
+        }
+        assert_decision(payload, "deny", expected_substr="Unicode Tag")
+
+    def test_variation_selectors_supplement_warned(self):
+        """Variation Selectors Supplement (U+E0100+) also detected as warning."""
+        hidden = chr(0xE0100) + chr(0xE0101)
+        payload = {
+            "tool_name": "write",
+            "tool_input": {"filePath": "test.md", "content": f"normal{hidden}text"}
+        }
+        # Medium severity = warn = allow with reason
+        assert_decision(payload, "allow", expected_substr="Invisible Unicode")

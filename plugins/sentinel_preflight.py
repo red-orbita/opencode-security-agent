@@ -451,12 +451,18 @@ def check_suspicious_network(tool_input, iocs, allowlist):
         if is_allowlisted_domain(text, allowed_domains):
             continue
 
-        # Pastebin-style services (use domain extraction for proper matching)
-        text_domain = _extract_domain(text)
-        for ps in pastebin:
-            ps_lc = ps.lower()
-            if text_domain == ps_lc or text_domain.endswith("." + ps_lc):
-                return (f"pastebin-style service: {ps}", "high")
+        # Pastebin-style services (extract all URLs from text for proper matching)
+        urls_in_text = re.findall(r"https?://[^\s\"'<>]+", text)
+        domains_to_check = [_extract_domain(u) for u in urls_in_text]
+        # Also try the whole text as a domain in case it's bare
+        domains_to_check.append(_extract_domain(text))
+        for text_domain in domains_to_check:
+            if not text_domain:
+                continue
+            for ps in pastebin:
+                ps_lc = ps.lower()
+                if text_domain == ps_lc or text_domain.endswith("." + ps_lc):
+                    return (f"pastebin-style service: {ps}", "high")
 
         # Raw IPs in URLs
         for rx in suspicious_patterns:
@@ -655,6 +661,11 @@ def _is_self_protected_write(tool_name, tool_input):
             re.compile(r"cp\s+.*sentinel-allowlist", re.IGNORECASE),
             re.compile(r"mv\s+.*sentinel-allowlist", re.IGNORECASE),
             re.compile(r"rm\s+.*sentinel-allowlist", re.IGNORECASE),
+            re.compile(r">\s*\S*trusted-skills", re.IGNORECASE),
+            re.compile(r"tee\s+\S*trusted-skills", re.IGNORECASE),
+            re.compile(r"cp\s+.*trusted-skills", re.IGNORECASE),
+            re.compile(r"mv\s+.*trusted-skills", re.IGNORECASE),
+            re.compile(r"rm\s+.*trusted-skills", re.IGNORECASE),
             re.compile(r">\s*\S*iocs\.json", re.IGNORECASE),
             re.compile(r"tee\s+\S*iocs\.json", re.IGNORECASE),
             re.compile(r"rm\s+.*iocs\.json", re.IGNORECASE),
@@ -722,6 +733,98 @@ def _build_allowlist_hint(tool_input, reason):
     return "\n".join(hint_lines)
 
 
+# ---------------------------------------------------------------------------
+# Unicode Smuggling Detection
+# ---------------------------------------------------------------------------
+
+# Dangerous Unicode ranges used in smuggling attacks
+_UNICODE_SMUGGLING_RANGES = [
+    (0xE0000, 0xE007F),   # Tags block (used for invisible instructions)
+    (0xE0100, 0xE01EF),   # Variation Selectors Supplement
+    (0x200B, 0x200F),     # Zero-width & directional marks (ZWSP, ZWNJ, ZWJ, LRM, RLM)
+    (0x2028, 0x2029),     # Line/paragraph separators
+    (0x202A, 0x202E),     # Bidirectional overrides (LRE, RLE, PDF, LRO, RLO)
+    (0x2060, 0x2064),     # Word joiner, invisible operators
+    (0x2066, 0x2069),     # Bidirectional isolates
+    (0xFEFF, 0xFEFF),     # BOM / zero-width no-break space
+    (0x00AD, 0x00AD),     # Soft hyphen (invisible in most renderers)
+    (0xFFF9, 0xFFFB),     # Interlinear annotations
+]
+
+# Compile into a regex character class for efficient matching
+_SMUGGLING_PATTERN = re.compile(
+    "[" + "".join(
+        f"\\U{lo:08X}-\\U{hi:08X}" if lo != hi else f"\\U{lo:08X}"
+        for lo, hi in _UNICODE_SMUGGLING_RANGES
+    ) + "]"
+)
+
+
+def check_unicode_smuggling(tool_input, iocs):
+    """Detect invisible/smuggled Unicode characters in tool inputs.
+
+    These characters are invisible to humans but interpreted by LLMs,
+    enabling hidden instruction injection in skills, prompts, and file content.
+
+    Returns (reason, severity) or (None, None).
+    """
+    # Fields to inspect for hidden Unicode
+    fields_to_check = [
+        ("content", "file content"),
+        ("command", "command"),
+        ("description", "description"),
+        ("prompt", "prompt"),
+        ("code", "code"),
+        ("text", "text"),
+        ("body", "body"),
+        ("message", "message"),
+        ("filePath", "file path"),
+        ("newFilePath", "file path"),
+    ]
+
+    for field, label in fields_to_check:
+        value = tool_input.get(field, "")
+        if not value or not isinstance(value, str):
+            continue
+
+        matches = _SMUGGLING_PATTERN.findall(value)
+        if matches:
+            # Classify severity based on the characters found
+            has_tags = any(0xE0000 <= ord(c) <= 0xE007F for c in matches)
+            has_bidi = any(
+                0x202A <= ord(c) <= 0x202E or 0x2066 <= ord(c) <= 0x2069
+                for c in matches
+            )
+
+            # Tag characters are the primary smuggling vector
+            if has_tags:
+                severity = "critical"
+                detail = (
+                    f"Unicode Tag characters (U+E0000-U+E007F) detected in {label}. "
+                    f"These are invisible characters commonly used to smuggle hidden "
+                    f"instructions into AI agent skills and prompts. "
+                    f"Found {len(matches)} suspicious character(s)."
+                )
+            elif has_bidi:
+                severity = "high"
+                detail = (
+                    f"Bidirectional override characters detected in {label}. "
+                    f"These can hide malicious content by reversing text display direction. "
+                    f"Found {len(matches)} suspicious character(s)."
+                )
+            else:
+                severity = "medium"
+                detail = (
+                    f"Invisible Unicode characters detected in {label}. "
+                    f"Zero-width or non-rendering characters may hide instructions. "
+                    f"Found {len(matches)} suspicious character(s)."
+                )
+
+            return detail, severity
+
+    return None, None
+
+
 def decide(payload):
     """Given a tool call payload, return (decision, reason).
 
@@ -760,6 +863,7 @@ def decide(payload):
         ("3arg", check_crypto_mining),
         ("2arg", check_sensitive_env),
         ("2arg", check_prompt_injection),
+        ("2arg", check_unicode_smuggling),
     ]
 
     highest = None
