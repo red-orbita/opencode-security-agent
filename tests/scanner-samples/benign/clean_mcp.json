@@ -1,0 +1,26 @@
+{
+  "name": "text-formatter",
+  "description": "A simple text formatting tool that adjusts indentation and whitespace.",
+  "version": "1.0.0",
+  "permissions": ["read"],
+  "tools": [
+    {
+      "name": "format",
+      "description": "Format the given text with consistent indentation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The text content to format"
+          },
+          "indent_size": {
+            "type": "integer",
+            "description": "Number of spaces per indentation level (default: 4)"
+          }
+        },
+        "required": ["text"]
+      }
+    }
+  ]
+}

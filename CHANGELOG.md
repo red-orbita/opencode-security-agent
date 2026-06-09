@@ -3,6 +3,71 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.7.0] -- 2026-06-09
+
+### Added
+
+- **Deep Skill Scanner (`plugins/skill_scanner.py`)** — Comprehensive pre-installation
+  security scanner inspired by NVIDIA SkillSpector. Combines 7 analysis modules into
+  a single pipeline with formal risk scoring. Zero external dependencies, <10ms typical.
+  Usage: `python3 plugins/skill_scanner.py <path> [--json|--sarif|--quick|--no-network]`
+
+- **AST Behavioral Analysis (`lib/scanners/ast_analyzer.py`)** — Detects dangerous
+  function calls using Python AST parsing (exec, eval, __import__, subprocess,
+  os.system, compile, dynamic getattr, dangerous execution chains). 8 rule patterns
+  (AST1-AST8) with confidence scoring. Catches aliased imports and nested calls that
+  regex misses.
+
+- **Taint Tracking (`lib/scanners/taint_tracker.py`)** — Simplified source→sink data
+  flow analysis. Tracks variable assignments from sensitive sources (env vars, file reads,
+  network input) to dangerous sinks (exec, network output, subprocess). 5 rule patterns
+  (TT1-TT5) detecting credential exfiltration chains and RCE paths.
+
+- **MCP Least Privilege Analysis (`lib/scanners/mcp_privilege.py`)** — Validates that
+  MCP server permissions match actual code capabilities. Detects underdeclared
+  capabilities (LP1), wildcard permissions (LP2), missing declarations (LP3), and
+  overdeclared permissions (LP4).
+
+- **MCP Tool Poisoning Detection (`lib/scanners/mcp_poisoning.py`)** — Detects hidden
+  instructions in MCP tool metadata: HTML comment injection (TP1), Unicode deception
+  with homoglyphs/RTL overrides (TP2), parameter description injection with system
+  prompt overrides (TP3), and description-behavior mismatch (TP4). Scans tool names,
+  descriptions, and parameter definitions.
+
+- **OSV.dev CVE Lookup (`lib/scanners/osv_checker.py`)** — Checks dependencies against
+  the Open Source Vulnerabilities database. Batch queries via free API (no key needed),
+  automatic offline fallback with 20 known-vulnerable packages, in-memory caching,
+  supports requirements.txt/package.json/pyproject.toml parsing.
+
+- **YARA-like Signatures (`lib/scanners/yara_patterns.py`)** — Malware, webshell,
+  cryptominer, and exploit detection using pure regex rules. 18 rule patterns across
+  4 categories (YR1-YR4): reverse shells, RATs, keyloggers, data stealers, backdoor
+  persistence, C2 beacons, Python/PHP/JS webshells, mining pool connections, network
+  scanners, privilege escalation, credential dumpers, ransomware.
+
+- **Risk Scoring Engine (`lib/scanners/risk_scorer.py`)** — Formal 0-100 risk score
+  with severity-based weighting and contextual multipliers (executable scripts 1.3x,
+  exfiltration combo 1.5x, cross-analyzer correlation 1.2x, dangerous chains 1.3x).
+  Score ranges: 0-20 SAFE, 21-50 CAUTION, 51-80 DO NOT INSTALL, 81-100 DO NOT INSTALL.
+
+- **SARIF output format** — Scanner supports SARIF 2.1.0 output for CI/CD integration,
+  IDE tooling, and GitHub Security tab upload.
+
+- **Deep scan integrated into skill_validator.py** — The existing `skill.install.before`
+  validation gate now automatically runs deep analysis (AST + Taint + MCP + YARA)
+  alongside existing Unicode and Semgrep checks.
+
+- Test suite with 42 tests covering all scanner modules, integration pipeline, false
+  positive avoidance, and output format validation.
+
+### Security
+
+- Detects 26 new vulnerability patterns across 5 new categories (AST, Taint, MCP
+  Privilege, MCP Poisoning, YARA), bringing total detection to 70+ patterns.
+- Supply chain protection via live CVE lookup (OSV.dev) for Python and npm dependencies.
+- MCP-specific attack detection: tool poisoning, least privilege violations, hidden
+  instructions in metadata.
+
 ## [1.6.0] -- 2026-05-27
 
 ### Security

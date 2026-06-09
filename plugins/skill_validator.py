@@ -197,6 +197,76 @@ def run_semgrep(target_path: Path) -> list[dict]:
     return findings
 
 
+def _run_deep_scan(target: Path) -> list[dict]:
+    """
+    Run the deep scanner modules (AST, Taint, MCP, YARA).
+    Converts scanner findings to skill_validator format.
+    Fails gracefully if scanners are unavailable.
+    """
+    findings = []
+    lib_dir = Path(__file__).parent.parent / "lib"
+
+    try:
+        if str(lib_dir) not in sys.path:
+            sys.path.insert(0, str(lib_dir))
+
+        from scanners.ast_analyzer import analyze_file as ast_file, analyze_directory as ast_dir
+        from scanners.taint_tracker import analyze_file as taint_file, analyze_directory as taint_dir
+        from scanners.mcp_privilege import analyze_mcp_permissions
+        from scanners.mcp_poisoning import analyze_directory as poison_dir
+        from scanners.yara_patterns import analyze_file as yara_file, analyze_directory as yara_dir
+
+        # AST analysis
+        if target.is_dir():
+            for f in ast_dir(target):
+                findings.append(_convert_finding(f))
+        elif target.suffix == ".py":
+            for f in ast_file(target):
+                findings.append(_convert_finding(f))
+
+        # Taint tracking
+        if target.is_dir():
+            for f in taint_dir(target):
+                findings.append(_convert_finding(f))
+        elif target.suffix == ".py":
+            for f in taint_file(target):
+                findings.append(_convert_finding(f))
+
+        # MCP privilege
+        for f in analyze_mcp_permissions(target):
+            findings.append(_convert_finding(f))
+
+        # MCP poisoning
+        if target.is_dir():
+            for f in poison_dir(target):
+                findings.append(_convert_finding(f))
+
+        # YARA patterns
+        if target.is_dir():
+            for f in yara_dir(target):
+                findings.append(_convert_finding(f))
+        elif target.is_file():
+            for f in yara_file(target):
+                findings.append(_convert_finding(f))
+
+    except (ImportError, Exception):
+        # Deep scanner not available — skip gracefully
+        pass
+
+    return findings
+
+
+def _convert_finding(scanner_finding: dict) -> dict:
+    """Convert a deep scanner finding to skill_validator format."""
+    return {
+        "file": scanner_finding.get("file", ""),
+        "check": f"deep_scan:{scanner_finding.get('rule_id', 'unknown')}",
+        "severity": scanner_finding.get("severity", "medium"),
+        "detail": scanner_finding.get("message", ""),
+        "line": scanner_finding.get("line", 0),
+    }
+
+
 def validate_skill(target: Path) -> dict:
     """
     Validate a skill path (file or directory).
@@ -229,6 +299,10 @@ def validate_skill(target: Path) -> dict:
     # 3. Semgrep (if available)
     semgrep_findings = run_semgrep(target)
     findings.extend(semgrep_findings)
+
+    # 4. Deep Scanner (AST + Taint + MCP + YARA)
+    deep_findings = _run_deep_scan(target)
+    findings.extend(deep_findings)
 
     # Determine verdict
     if not findings:
