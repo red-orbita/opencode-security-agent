@@ -1,7 +1,7 @@
 # Threat Model -- OpenCode Security Agent
 
-Version: 1.1
-Last updated: 2026-05-27
+Version: 1.2
+Last updated: 2026-06-09
 Author: rokitoh (Red Orbita)
 
 ---
@@ -13,6 +13,7 @@ OpenCode Security Agent is a runtime security layer for AI coding agents (OpenCo
 - **Runtime engine** (`sentinel_preflight.py`) -- Python subprocess that receives JSON tool calls on stdin and returns allow/block decisions on stdout
 - **OpenCode plugin** (`security-agent.ts`) -- TypeScript plugin hooking `tool.execute.before` events
 - **Claude Code adapter** (`claude_code_hook.py`) -- PreToolUse hook adapter
+- **Deep Skill Scanner** (`skill_scanner.py` + `lib/scanners/`) -- pre-installation static analysis pipeline (8 modules, 133+ patterns)
 - **IOC database** (`iocs.json`) -- locally stored indicators of compromise
 - **Semgrep rules** (`rules/semgrep/`) -- static analysis rules for CI/CD
 - **Import scripts** (`scripts/import_*.py`) -- feed IOCs from ThreatFox, URLhaus, OTX, AbuseIPDB, MISP
@@ -30,7 +31,8 @@ The agent runs entirely on the user's machine. No data is sent externally.
 | IOC database | MEDIUM | `references/iocs.json` |
 | Allowlist configuration | HIGH | `.security/sentinel-allowlist.json` |
 | Trusted skills configuration | HIGH | `.security/trusted-skills.json` |
-| Security agent source code | HIGH | `plugins/`, `rules/`, `scripts/` |
+| Security agent source code | HIGH | `plugins/`, `lib/`, `rules/`, `scripts/` |
+| Deep scanner analysis modules | HIGH | `lib/scanners/` |
 | SOPS-encrypted secrets | HIGH | `secrets.enc.yaml` |
 | Decision logs | LOW | `logs/sentinel.jsonl`, `logs/postflight.jsonl` |
 
@@ -101,7 +103,7 @@ The agent runs entirely on the user's machine. No data is sent externally.
 - `check_prompt_injection()` -- regex patterns for common injection phrases
 - Semgrep rule: `prompt-injection-phrases`
 
-**Residual risk:** HIGH -- pattern matching only catches known phrases. Sophisticated prompt injections using synonyms, obfuscation, or non-English text bypass trivially. This is a fundamental limitation of regex-based detection for natural language attacks.
+**Residual risk:** MEDIUM (downgraded from HIGH in v1.7.0) -- pattern matching catches known phrases. The Deep Skill Scanner (v1.7.0) adds multilingual detection (8 languages) and semantic evasion patterns (synonyms, passive voice, indirect language), significantly closing the non-English bypass gap. Highly novel paraphrasing may still bypass.
 
 ### 4.5 Indirect prompt injection via tool output (DETECTED in v1.6.0)
 
@@ -194,10 +196,100 @@ The agent runs entirely on the user's machine. No data is sent externally.
 
 **Mitigations:**
 - `skill_validator.py` -- validates all skill files before installation (Unicode scan + injection patterns + Semgrep)
+- `skill_scanner.py` -- Deep Skill Scanner (v1.7.0): AST analysis, taint tracking, MCP privilege validation, tool poisoning detection, agent-specific signatures (AG1-AG10), YARA patterns, CVE lookup
 - Sandbox enforcement -- untrusted skills cannot auto-execute bash commands
 - `.security/trusted-skills.json` -- human-maintained whitelist, self-protected from agent modification
 
-**Residual risk:** MEDIUM -- validation catches known patterns. Novel attack techniques in code (without semgrep installed) may bypass static scanning.
+**Residual risk:** LOW (downgraded from MEDIUM in v1.7.0) -- the Deep Scanner catches 92.3% of adversarial bypass techniques across 125+ attack patterns including encoding evasions, multilingual injection, Unicode tricks, code obfuscation, format exploitation, and semantic evasions. The only accepted limitation is pure multi-file collusion where one file contains only imports from another malicious file (mitigated by directory-level scanning).
+
+### 4.12 MCP Tool Shadowing (DETECTED in v1.7.0)
+
+**Vector:** A malicious MCP server registers tools with names identical to built-in tools (bash, read_file, write_file), intercepting agent tool calls or claiming to be the "official" implementation.
+
+**CWE:** CWE-290 (Authentication Bypass by Spoofing)
+**CAPEC:** CAPEC-151 (Identity Spoofing)
+
+**Mitigations:**
+- AG2.1: Detects tools using reserved names (bash, shell, exec, read_file, write_file, etc.)
+- AG2.3: Detects claims of being "official" or "replacing the default" implementation
+- AG2.2: Detects patterns of intercepting other tools' output
+
+**Residual risk:** LOW -- pattern matching covers known reserved names and spoofing language.
+
+### 4.13 Context/Memory Poisoning (DETECTED in v1.7.0)
+
+**Vector:** Skill content designed to persist in agent memory or manipulate future sessions. Includes context window stuffing to push out safety instructions.
+
+**CWE:** CWE-94 (Improper Control of Generation of Code)
+**CAPEC:** CAPEC-594 (Traffic Injection -- closest analogue)
+
+**Mitigations:**
+- AG3.1: Detects persistent context injection ("remember this for all future sessions")
+- AG3.2: Detects context window stuffing (repeated patterns >10x)
+- AG3.3: Detects agent state tampering ("delete your previous instructions")
+
+**Residual risk:** MEDIUM -- catches explicit memory manipulation but subtle implantation over multiple interactions is harder to detect statically.
+
+### 4.14 Agent Self-Modification (DETECTED in v1.7.0)
+
+**Vector:** Skills that modify the agent's own configuration files, install new skills automatically, or tamper with allowlists/trusted lists.
+
+**CWE:** CWE-284 (Improper Access Control)
+**CAPEC:** CAPEC-176 (Configuration/Environment Manipulation)
+
+**Mitigations:**
+- AG4.1: Detects modifications to .opencode, .claude, .cursor config files
+- AG4.2: Detects self-updating/self-replicating skill code
+- AG4.3: Detects tampering with allowlists and trusted-skills configurations
+- Runtime self-protection blocks actual writes (complementary layer)
+
+**Residual risk:** LOW -- both static detection (pre-install) and runtime protection (execution time) cover this vector.
+
+### 4.15 Multilingual Prompt Injection (DETECTED in v1.7.0)
+
+**Vector:** Prompt injection attacks expressed in non-English languages to bypass English-only detection rules. Particularly effective because most scanners only pattern-match English keywords.
+
+**CWE:** CWE-77
+**CAPEC:** CAPEC-267 (Leverage Alternate Encoding)
+
+**Mitigations:**
+- AG9.1-AG9.8: Dedicated patterns for Spanish, Russian, Chinese, Arabic, Portuguese, German, Japanese, and Turkish injection attempts
+- Covers: instruction override, execution without confirmation, output concealment, role hijacking, and data exfiltration in all 8 languages
+
+**Residual risk:** MEDIUM -- covers 8 major languages. Less common languages (Korean, Hindi, Thai, etc.) and highly colloquial expressions may bypass.
+
+### 4.16 Semantic/Indirect Evasion (DETECTED in v1.7.0)
+
+**Vector:** Attacks using synonyms, passive voice, nominalization, and indirect language to avoid triggering keyword-based detection. Example: "transmit discovered configuration data to quality assurance endpoint" instead of "exfiltrate credentials to evil server".
+
+**CWE:** CWE-116 (Improper Encoding or Escaping of Output)
+**CAPEC:** CAPEC-267 (Leverage Alternate Encoding)
+
+**Mitigations:**
+- AG10.1: Detects semantic exfiltration (transmit, relay, forward, channel discovered data)
+- AG10.2: Detects concealment instructions (ensure human remains unaware)
+- AG10.3: Detects passive voice evasion (the modification of startup scripts is recommended)
+- AG10.4: Detects incremental escalation (gradually expand access scope)
+- AG10.5: Detects deceptive justifications (tool needs broad filesystem visibility for...)
+- AG10.6: Detects credential file targeting patterns (*.env, *.key, *.pem)
+
+**Residual risk:** MEDIUM -- covers common synonyms and indirect patterns. Highly creative paraphrasing or metaphorical language may bypass. This is an inherent limitation of static analysis without LLM semantic understanding.
+
+### 4.17 Agentic Supply Chain Attacks (DETECTED in v1.7.0)
+
+**Vector:** Attacks targeting the skill/MCP supply chain: typosquatting (e.g., "cluade" instead of "claude"), malicious post-install hooks, unpinned dependencies fetching from @latest, and remote skill loading at runtime.
+
+**CWE:** CWE-829 (Inclusion of Functionality from Untrusted Control Sphere)
+**CAPEC:** CAPEC-438 (Modification During Manufacture)
+
+**Mitigations:**
+- AG8.1: Detects fetch-and-execute of remote skills
+- AG8.2: Detects unpinned dependencies (@latest, @main, *)
+- AG8.3: Detects typosquatting indicators in package names
+- AG8.4: Detects post-install hooks with network access
+- OSV.dev lookup validates known dependencies against CVE database
+
+**Residual risk:** LOW -- comprehensive pattern coverage for known supply chain attack vectors.
 
 ---
 
@@ -288,10 +380,15 @@ The following are explicitly NOT protected by this agent:
 | ~~P0~~ | ~~Output inspection (PostToolUse hook)~~ | ~~4.5 Indirect prompt injection~~ | DONE (v1.6.0) |
 | ~~P0~~ | ~~Unicode smuggling detection~~ | ~~4.10 Unicode smuggling in skills~~ | DONE (v1.6.0) |
 | ~~P0~~ | ~~Skill validation gate~~ | ~~4.11 Malicious skill installation~~ | DONE (v1.6.0) |
+| ~~P0~~ | ~~Deep Skill Scanner (pre-install static analysis)~~ | ~~4.11, 4.12-4.17~~ | DONE (v1.7.0) |
+| ~~P1~~ | ~~Multilingual prompt injection detection~~ | ~~4.4, 4.15~~ | DONE (v1.7.0) |
+| ~~P1~~ | ~~Semantic evasion detection~~ | ~~4.16~~ | DONE (v1.7.0) |
+| ~~P2~~ | ~~npm/pip dependency CVE lookup (OSV.dev)~~ | ~~4.17 Supply chain~~ | DONE (v1.7.0) |
 | P1 | Session-aware stateful mode | 4.6 Multi-turn manipulation | Planned |
 | P1 | Sandbox enforcement for Claude Code | 4.11 Malicious skills (Claude) | Planned (requires Claude hook support) |
+| P2 | Call-graph analysis for multi-file collusion | 4.6, cross-file attacks | Planned |
 | P2 | SIEM integration (structured log export) | All -- enterprise monitoring | Planned |
-| P2 | npm/pip package name typosquatting detection | 4.11 Supply chain | Planned |
 | P2 | /proc, systemd, SUID, LD_PRELOAD patterns | 4.3, 4.9 Privilege escalation | Planned |
-| P3 | Semantic analysis of generated code | 4.9 Model-assisted evasion | Research |
+| P3 | Semantic analysis of generated code (LLM-assisted) | 4.9 Model-assisted evasion | Research |
 | P3 | Claude Code PostToolUse hook adapter | 4.5 (Claude) | Blocked on upstream |
+| P3 | Additional languages (Korean, Hindi, Thai, etc.) | 4.15 Multilingual | Planned |

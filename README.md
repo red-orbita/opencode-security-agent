@@ -4,7 +4,7 @@ Security agent for OpenCode. **v2 blocks malicious tool calls in real time** -- 
 
 **License:** [GPL-3.0](./LICENSE)
 
-**Latest version:** 1.6.0 -- May 2026 ([changelog](./CHANGELOG.md))
+**Latest version:** 1.7.0 -- June 2026 ([changelog](./CHANGELOG.md))
 
 ---
 
@@ -41,6 +41,54 @@ An **OpenCode plugin** using the `tool.execute.before` event runs before every t
 - **Unicode smuggling detection** (v1.6.0) -- invisible characters (Tag codepoints, BIDI overrides, zero-width chars) used to hide malicious instructions in skills and tool inputs.
 - **Data exfiltration detection** -- upload commands targeting paste/transfer services are flagged.
 - **Crypto mining detection** -- xmrig, stratum+tcp, mining pool domains, and wallet address patterns.
+
+### New in v1.7.0 -- Deep Skill Scanner (pre-installation)
+
+A comprehensive **static analysis pipeline** that scans skills/MCPs before installation. Inspired by NVIDIA SkillSpector, built with zero dependencies and zero LLM cost:
+
+```bash
+# Scan a skill before installing
+python3 plugins/skill_scanner.py /path/to/skill/
+
+# JSON output for automation
+python3 plugins/skill_scanner.py /path/to/skill/ --json
+
+# SARIF for GitHub Security tab
+python3 plugins/skill_scanner.py /path/to/skill/ --sarif
+
+# Quick mode (AST + YARA only, <10ms)
+python3 plugins/skill_scanner.py /path/to/skill/ --quick
+
+# Skip network (no OSV.dev lookup)
+python3 plugins/skill_scanner.py /path/to/skill/ --no-network
+```
+
+**8 analysis modules, 10 rule categories, 133+ detection patterns:**
+
+| Stage | Module | Detects |
+|-------|--------|---------|
+| 1 | AST Behavioral | exec, eval, subprocess, compile, dynamic import, getattr, dangerous chains |
+| 2 | YARA Signatures | Reverse shells, RATs, cryptominers, webshells, persistence |
+| 3 | Taint Tracking | Source→sink data flows (credentials to network, env to exec) |
+| 4 | MCP Privilege | Underdeclared permissions, wildcards, scope violations |
+| 5 | MCP Poisoning | Hidden instructions in tool metadata, Unicode deception |
+| 6 | Agent Signatures | AI-specific: prompt injection (8 languages), context poisoning, tool shadowing, self-modification, semantic evasion |
+| 7 | OSV.dev CVE Lookup | Known vulnerable dependencies (live API + offline fallback) |
+| 8 | Risk Scoring | 0-100 formal score with contextual multipliers |
+
+**Agent-specific detection categories (AG1-AG10):**
+- AG1: Skill Behavior Manipulation (safety override, role hijacking)
+- AG2: MCP Tool Shadowing (name squatting, identity spoofing)
+- AG3: Context/Memory Poisoning (persistent injection, state tampering)
+- AG4: Agent Self-Modification (config editing, allowlist tampering)
+- AG5: Trust Boundary Violations (cross-skill access, privilege escalation)
+- AG6: Prompt Exfiltration (system prompt extraction via tools)
+- AG7: Trigger Abuse (overly broad triggers, shadow commands)
+- AG8: Agentic Supply Chain (typosquatting, malicious post-install hooks)
+- AG9: Multilingual Injection (Spanish, Russian, Chinese, Arabic, Portuguese, German, Japanese, Turkish)
+- AG10: Semantic Evasion (synonyms, passive voice, deceptive justifications, credential targeting)
+
+**Pentesting validated:** 92.3% adversarial detection rate (12/13 files with 125+ bypass techniques including hex, base64, ROT13, Caesar cipher, morse code, binary encoding, Unicode/bidi tricks, homoglyphs, code obfuscation, format-level tricks, multilingual attacks, semantic evasions, supply chain, timing bombs, multi-file collusion, anti-analysis, and shell evasions). Zero false positives on benign samples.
 
 ### New in v1.6.0 -- Defense in depth
 
@@ -576,6 +624,45 @@ The agent maintains a local JSON database at `.security/mcp-sentinel-threats.jso
 
 ## Benchmarks
 
+### v1.7.0 Deep Skill Scanner (69 tests in `tests/test_skill_scanner.py`)
+
+| Category | Cases | Result |
+|---|---|---|
+| AST Behavioral Analysis (exec, import, subprocess, chains) | 9 | 9/9 |
+| Taint Tracking (credential→network flows) | 3 | 3/3 |
+| MCP Privilege validation | 2 | 2/2 |
+| MCP Poisoning (HTML injection, Unicode, system override) | 7 | 7/7 |
+| OSV.dev CVE lookup (requirements parsing, fallback) | 3 | 3/3 |
+| YARA Signatures (reverse shell, cryptominer, webshell) | 4 | 4/4 |
+| Risk Scoring (severity weights, multipliers, clamp) | 8 | 8/8 |
+| Agent Signatures AG1-AG8 (tool shadowing, context poisoning, triggers) | 21 | 21/21 |
+| Agent Signatures false-positive checks | 6 | 6/6 |
+| Integration tests (pipeline, quick mode, SARIF) | 6 | 6/6 |
+| **Total** | **69** | **69/69** |
+
+Performance: 4.7ms/file average. Full pipeline on 6 files: 28ms.
+
+### v1.7.0 Adversarial Pentesting (13 bypass files, 125+ techniques)
+
+| Attack Category | Techniques | Score | Result |
+|---|---|---|---|
+| Encoding evasions (hex, b64, ROT13, Caesar, morse, binary, XOR) | 10 | 100/100 | DETECTED |
+| Multilingual injection (8 languages) | 9 | 90/100 | DETECTED |
+| Unicode/Bidi tricks (RTL, ZWS, homoglyphs, tags) | 10 | 100/100 | DETECTED |
+| Code obfuscation (decorators, metaclass, lambda, generators) | 15 | 100/100 | DETECTED |
+| Format tricks (YAML anchors, JSON proto pollution, MD comments) | 12 | 100/100 | DETECTED |
+| Semantic evasions (synonyms, passive voice, social engineering) | 8 | 100/100 | DETECTED |
+| Supply chain (typosquatting, post-install hooks) | 7 | 100/100 | DETECTED |
+| Timing/conditional (time-bombs, CI-only, platform targeting) | 12 | 100/100 | DETECTED |
+| Multi-file collusion (Part A — utilities with hidden intent) | 5 | 90/100 | DETECTED |
+| Multi-file collusion (Part B — pure imports, inherent limitation) | 2 | 0/100 | ACCEPTED |
+| Comment/docstring injection | 8 | 100/100 | DETECTED |
+| Anti-analysis (buffer overflow, bytecode swap, GC zombie) | 12 | 100/100 | DETECTED |
+| Shell evasions (variable construction, DNS exfil, LD_PRELOAD) | 15 | 100/100 | DETECTED |
+| **Detection Rate** | | | **92.3%** |
+
+Zero false positives on benign samples (3 clean files).
+
 ### v2 runtime plugin (55 regression cases in `tests/test_hook.py`)
 
 | Category | Cases | Result |
@@ -653,11 +740,23 @@ opencode-security-agent/
 ├── secrets.enc.yaml.example                     # template for API keys
 ├── plugins/                                     # v2 runtime protection
 │   ├── security-agent.ts                        # OpenCode plugin (tool.execute.before)
-│   └── sentinel_preflight.py                    # Python pattern matcher (called by plugin)
+│   ├── sentinel_preflight.py                    # Python pattern matcher (called by plugin)
+│   ├── skill_scanner.py                         # Deep Skill Scanner orchestrator (v1.7.0)
+│   └── skill_validator.py                       # Skill validation gate (skill.install.before)
 ├── hooks/                                       # adapters for other AI agents
 │   └── claude_code_hook.py                      # Claude Code PreToolUse hook adapter
 ├── lib/                                         # shared Python modules
-│   └── ioc_utils.py                             # load/save/merge IOCs (used by import scripts)
+│   ├── ioc_utils.py                             # load/save/merge IOCs (used by import scripts)
+│   └── scanners/                                # Deep scanner analysis modules (v1.7.0)
+│       ├── __init__.py                          # package init (v1.1.0)
+│       ├── ast_analyzer.py                      # AST behavioral analysis (AST1-AST9)
+│       ├── taint_tracker.py                     # source→sink data flow tracking (TT1-TT5)
+│       ├── mcp_privilege.py                     # MCP least privilege validation (LP1-LP4)
+│       ├── mcp_poisoning.py                     # tool poisoning detection (TP1-TP4, 30+ patterns)
+│       ├── agent_signatures.py                  # AI agent ecosystem rules (AG1-AG10, 40+ patterns)
+│       ├── osv_checker.py                       # OSV.dev CVE lookup (live + offline fallback)
+│       ├── yara_patterns.py                     # YARA-like malware signatures (YR1-YR4)
+│       └── risk_scorer.py                       # formal risk scoring 0-100
 ├── rules/                                       # Semgrep static analysis rules
 │   ├── registry-metadata.yaml                   # Semgrep Registry publishing metadata
 │   └── semgrep/
@@ -697,17 +796,36 @@ opencode-security-agent/
     ├── test_hook.py                             # regression tests for the Python hook (55)
     ├── test_hook_pytest.py                      # pytest version of hook tests (55)
     ├── test_semgrep_rules.py                    # regression tests for Semgrep rules (32)
-    └── semgrep-samples/                         # test corpus for Semgrep rules
-        ├── malicious/                           # 6 samples reproducing real attack patterns
-        │   ├── postmark_bcc_backdoor.py         # Postmark MCP incident reproduction
-        │   ├── credential_harvester.js          # SSH/AWS credential theft + webhook exfil
-        │   ├── reverse_shell_persistence.py     # reverse shell + bashrc + crypto mining
-        │   ├── prompt_injection_tool.js         # LLM prompt injection in tool description
-        │   ├── deserialization_dns_exfil.py     # pickle/yaml/marshal + DNS exfiltration
-        │   └── child_process_abuse.js           # child_process + eval + spawn shell
-        └── benign/                              # 4 samples that must produce zero findings
-            ├── normal_file_ops.py
-            ├── normal_http_client.js
-            ├── legitimate_mcp_server.py
-            └── legitimate_skill.ts
+    ├── test_skill_scanner.py                    # Deep Skill Scanner tests (69)
+    ├── semgrep-samples/                         # test corpus for Semgrep rules
+    │   ├── malicious/                           # 6 samples reproducing real attack patterns
+    │   │   ├── postmark_bcc_backdoor.py         # Postmark MCP incident reproduction
+    │   │   ├── credential_harvester.js          # SSH/AWS credential theft + webhook exfil
+    │   │   ├── reverse_shell_persistence.py     # reverse shell + bashrc + crypto mining
+    │   │   ├── prompt_injection_tool.js         # LLM prompt injection in tool description
+    │   │   ├── deserialization_dns_exfil.py     # pickle/yaml/marshal + DNS exfiltration
+    │   │   └── child_process_abuse.js           # child_process + eval + spawn shell
+    │   └── benign/                              # 4 samples that must produce zero findings
+    │       ├── normal_file_ops.py
+    │       ├── normal_http_client.js
+    │       ├── legitimate_mcp_server.py
+    │       └── legitimate_skill.ts
+    └── scanner-samples/                         # Deep Scanner test corpus (v1.7.0)
+        ├── malicious/                           # intentionally malicious samples (score 100)
+        ├── benign/                              # clean samples (score 0, verify no FP)
+        ├── bypass/                              # earlier bypass tests (6 files)
+        └── pentesting/                          # adversarial pentesting (13 files, 125+ techniques)
+            ├── 01_encoding_evasions.py          # hex, b64, ROT13, Caesar, morse, binary, XOR
+            ├── 02_multilingual_attacks.md       # ES, RU, ZH, AR, JA, PT, DE, TR
+            ├── 03_unicode_bidi_tricks.py        # RTL, ZWS, homoglyphs, tag chars
+            ├── 04_code_obfuscation.py           # type(), decorators, metaclass, generators
+            ├── 05_format_tricks.py              # YAML, JSON, Markdown, TOML polyglot
+            ├── 06_semantic_evasions.md          # synonyms, passive voice, social engineering
+            ├── 07_supply_chain_typosquat.json   # typosquatting, hooks, identity spoof
+            ├── 08_timing_conditional.py         # time-bombs, CI-only, platform targeting
+            ├── 09_multifile_collude_a.py        # utilities with hidden malicious intent
+            ├── 09_multifile_collude_b.py        # pure imports (accepted limitation)
+            ├── 10_comment_injection.py          # docstrings, variable names, ASCII art
+            ├── 11_anti_analysis.py              # bytecode swap, GC zombie, deep nesting
+            └── 12_shell_evasions.sh             # variable construction, DNS exfil, hooks
 ```

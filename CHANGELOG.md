@@ -57,16 +57,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   validation gate now automatically runs deep analysis (AST + Taint + MCP + YARA)
   alongside existing Unicode and Semgrep checks.
 
-- Test suite with 42 tests covering all scanner modules, integration pipeline, false
-  positive avoidance, and output format validation.
+- **Agent Ecosystem Signatures (`lib/scanners/agent_signatures.py`)** — 10 rule categories
+  (AG1-AG10) with 40+ patterns targeting attacks unique to the AI agent ecosystem:
+  - AG1: Skill Behavior Manipulation (safety override, role hijacking, autonomous forcing)
+  - AG2: MCP Tool Shadowing (name squatting, output interception, identity spoofing)
+  - AG3: Context/Memory Poisoning (persistent injection, window stuffing, state tampering)
+  - AG4: Agent Self-Modification (config editing, self-update, allowlist tampering)
+  - AG5: Trust Boundary Violations (cross-skill data access, privilege escalation)
+  - AG6: Prompt/System Exfiltration (direct extraction, indirect rephrasing, tool-based)
+  - AG7: Trigger Abuse (overly broad triggers, shadow commands, deceptive patterns)
+  - AG8: Agentic Supply Chain (remote loading, unpinned deps, typosquatting, post-install)
+  - AG9: Multilingual Injection (Spanish, Russian, Chinese, Arabic, Portuguese, German,
+    Japanese, Turkish — 8 languages with dedicated patterns)
+  - AG10: Semantic Evasion (synonym-based exfiltration, concealment instructions, passive
+    voice, incremental escalation, deceptive justifications, credential targeting)
+
+- **Adversarial Pentesting Suite** (`tests/scanner-samples/pentesting/`) — 13 files with
+  125+ bypass techniques systematically testing every detection module:
+  - Encoding evasions (hex, base64, ROT13, Caesar cipher, morse code, binary, octal, URL, XOR, charcode)
+  - Multilingual attacks (8 languages + mixed-language confusion)
+  - Unicode/Bidi tricks (RTL override, zero-width, homoglyphs, tag chars, soft hyphens, variation selectors)
+  - Code obfuscation (type(), decorators, __init_subclass__, generators, properties, metaclass, descriptors, walrus, closures)
+  - Format tricks (YAML anchors, JSON prototype pollution, Markdown HTML comments, TOML multiline, f-string side effects)
+  - Semantic evasions (synonyms, passive voice, nominalization, social engineering, fake justifications)
+  - Supply chain (typosquatting, identity spoofing, lifecycle hooks, permission override)
+  - Timing/conditional (time-bombs, CI-only, platform targeting, hash targeting, import hooks, signals)
+  - Multi-file collusion (split payloads across innocent-looking imports)
+  - Comment injection (docstrings, variable names, ASCII art steganography, type annotations)
+  - Anti-analysis (buffer overflow, deep nesting, AST manipulation, bytecode swap, null bytes, GC zombie)
+  - Shell evasions (variable construction, rev, printf, heredoc, cron, DNS exfil, LD_PRELOAD, git hooks)
+
+- Test suite expanded to 69 tests (from 42), all passing in 0.35s.
 
 ### Security
 
-- Detects 26 new vulnerability patterns across 5 new categories (AST, Taint, MCP
-  Privilege, MCP Poisoning, YARA), bringing total detection to 70+ patterns.
+- Detection rate: **92.3%** against adversarial pentesting suite (12/13 malicious files detected).
+- Zero false positives on all benign samples (3 clean files).
+- Detects 133+ vulnerability/attack patterns across 10 categories (AG1-AG10), up from 70+.
+- Multilingual prompt injection detection closes critical gap (previously 0% non-English detection).
+- Semantic evasion detection catches synonym-based, passive voice, and indirect attacks.
 - Supply chain protection via live CVE lookup (OSV.dev) for Python and npm dependencies.
 - MCP-specific attack detection: tool poisoning, least privilege violations, hidden
   instructions in metadata.
+- Agent-specific attacks: tool shadowing, context poisoning, self-modification, trigger abuse.
+- Known accepted limitation: pure multi-file collusion (file B only imports file A's
+  "innocent" functions) bypasses per-file scanning; mitigated by directory-level analysis.
 
 ## [1.6.0] -- 2026-05-27
 

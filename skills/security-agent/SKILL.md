@@ -215,6 +215,49 @@ The custom rules cover 6 categories:
 - **dangerous-commands** — curl|bash, reverse shells, base64|sh, .bashrc hijack, fork bombs, eval/exec
 - **supply-chain-patterns** — crypto mining (xmrig, stratum, pool domains), prompt injection phrases, base64+send obfuscation
 
+#### Step 3a-bis (pre-LLM): Deep Skill Scanner (v1.7.0)
+
+Run the Deep Skill Scanner for comprehensive static analysis. This pipeline combines 8 analysis
+modules with 133+ detection patterns and requires zero external dependencies:
+
+```bash
+# Full scan with risk scoring
+python3 plugins/skill_scanner.py /path/to/skill/
+
+# Quick mode (AST + YARA only, <10ms)
+python3 plugins/skill_scanner.py /path/to/skill/ --quick
+
+# JSON output for automation
+python3 plugins/skill_scanner.py /path/to/skill/ --json
+
+# SARIF for CI/CD integration
+python3 plugins/skill_scanner.py /path/to/skill/ --sarif
+```
+
+**Detection categories:**
+- AST Behavioral Analysis — exec, eval, subprocess, compile, dynamic imports, dangerous chains
+- Taint Tracking — credential-to-network data flows, env-to-exec paths
+- MCP Privilege Validation — underdeclared permissions, wildcard abuse, scope violations
+- MCP Poisoning — hidden instructions in metadata, Unicode deception, HTML injection
+- Agent Ecosystem Signatures (AG1-AG10):
+  - Skill behavior manipulation (safety override, role hijacking)
+  - MCP tool shadowing (name squatting, identity spoofing)
+  - Context/memory poisoning (persistent injection, state tampering)
+  - Agent self-modification (config editing, allowlist tampering)
+  - Trust boundary violations (cross-skill access, privilege escalation)
+  - Prompt exfiltration (system prompt extraction)
+  - Trigger abuse (overly broad triggers, shadow commands)
+  - Supply chain attacks (typosquatting, post-install hooks)
+  - **Multilingual injection** (8 languages: ES, RU, ZH, AR, PT, DE, JA, TR)
+  - **Semantic evasion** (synonyms, passive voice, deceptive justifications)
+- YARA Signatures — reverse shells, cryptominers, webshells, persistence mechanisms
+- OSV.dev CVE Lookup — checks dependencies against known vulnerability database
+
+**Risk score 0-100:** Score >= 21 means DO NOT INSTALL. Always show the score to the user.
+
+If the deep scanner finds issues, include them in the report. These are high-confidence
+findings validated against 125+ adversarial bypass techniques (92.3% detection rate).
+
 #### Step 3b (LLM): Manual pattern analysis
 
 For each installed skill, read its SKILL.md and any bundled scripts. Flag these patterns:
